@@ -80,6 +80,7 @@ fstats *status;
 
 static void sys_init(void)
 {
+	// Initialise the video system
 	VIDEO_Init();
 	
 	// Obtain the preferred video mode from the system
@@ -88,9 +89,6 @@ static void sys_init(void)
 
 	// Allocate memory for the display in the uncached region
 	xfb = MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
-	
-	// Initialise the console, required for printf
-	console_init(xfb,20,20,rmode->fbWidth,rmode->xfbHeight,rmode->fbWidth*VI_DISPLAY_PIX_SZ);
 	
 	// Set up the video registers with the chosen mode
 	VIDEO_Configure(rmode);
@@ -107,19 +105,29 @@ static void sys_init(void)
 	// Wait for Video setup to complete
 	VIDEO_WaitVSync();
 	if(rmode->viTVMode&VI_NON_INTERLACE) VIDEO_WaitVSync();
-	
-	//------------------------------------------------------------------------------------------------------
-	
-	printf("\x1b[1;0H");
+
+	// Set console parameters
+    int x = 24, y = 32, w, h;
+    w = rmode->fbWidth - (32);
+    h = rmode->xfbHeight - (48);
+
+    // Initialize the console - CON_InitEx works after VIDEO_ calls
+	CON_InitEx(rmode, x, y, w, h);
+
+	// Clear the garbage around the edges of the console
+    VIDEO_ClearFrameBuffer(rmode, xfb, COLOR_BLACK);
 }
 
 void resetscreen()
 {
-	//Clear screen.
+	printf("\x1b[J");
+
+/*	//Clear screen.
 	VIDEO_ClearFrameBuffer(rmode, xfb, COLOR_BLACK);
 	//Set cursor to 1, 0.
 	printf("\x1b[1;0H");
 	//Gui_DrawBackground();
+*/
 }
 
 void flash(char* source, char* destination)
@@ -569,7 +577,6 @@ u32 ret;
 
 int browser()
 {
-
 	resetscreen();
 	printf(" Press - & + to update fstoolbox to the latest version !\n");
 	printf(" Press - to dump file to SD, press + to write file from SD to NAND or\n");
@@ -616,61 +623,81 @@ int browser()
 	}
 }
 
-//list_t *list2;	
-s32 tcnt;
-s32 ret2;
 
 int dumpfolder(char source[1024], char destination[1024])
 {
+	printf("Dumping folder: %s\n", source);
+	
+	int buttonsdown = 0;
+	WPAD_ScanPads();
+	buttonsdown = WPAD_ButtonsDown(0);
+	if (buttonsdown) 
+	{
+		printf("Exiting...\n");
+		sleep(10);
+		exit(0);
+	}
+
+	s32 tcnt;
+	int ret;
 	char path[1024];
 	char path2[1024];
-
-	//resetscreen();
-	printf("%s\n", source);
-	//sleep(5);
 	dirent_t *test = NULL;
 	getdir(source, &test, &tcnt);
-	printf("count %d files/dirs\n", tcnt);
-	//sleep(5);
+
+	if (strlen(source) == 1)
+	{
+		sprintf(path, "%s", destination);
+	} else
+	{
+		sprintf(path, "%s%s", destination, source);
+	}
+
+	ret = opendir(path);
+	if (!ret)
+	{
+		ret = mkdir(path, 0777);
+		if (ret < 0)
+		{
+			printf("Error making directory %d...\n", ret);
+			sleep(10);
+			exit(0);
+		}
+	}
+	
 	for(i = 0; i < tcnt; i++) 
 	{				
-		if(test[i].type == DIRENT_T_FILE) 
+		if (strlen(source) == 1)
+		{
+			sprintf(path, "%s%s", source, test[i].name);
+		} else
 		{
 			sprintf(path, "%s/%s", source, test[i].name);
-			printf("filepath : %s\n", path);
+		}
+		
+		if(test[i].type == DIRENT_T_FILE) 
+		{
+			sprintf(path2, "%s%s", destination, path);
 
-			sprintf(path2, "%s%s/%s", destination, source, test[i].name);
-			printf("sd path : %s\n", path2);
+			printf("Dumping file: %s\n", path);
+			printf("To: %s\n", path2);
 
-			sprintf(path2, "%s%s", destination, source);
-
-			ret2 = opendir(path2);
-			if (!ret2)
-			{
-				ret2 = mkdir(path2, 0777);
-				if (ret2 < 0)
-				{
-					printf("Error making directory %d...\n", ret2);
-					sleep(10);
-					exit(0);
-				}
-			}
 			//sleep(5);
 			dumpfile(path, path2);
 		} else
 		{
 			if(test[i].type == DIRENT_T_DIR) 
 			{
-				sprintf(path, "%s/%s", source, test[i].name);
 				dumpfolder(path, destination);
 			}	
 		}
 	}
 	free(test);
+	printf("Dumping folder %s complete\n", source);
 }	
 
 u32 numdir;
-
+/*
 int dirget(char filepath[1024])
 {
 	dumpfolder(filepath, "sd:/FSTOOLBOX");
@@ -706,6 +733,7 @@ int dirget(char filepath[1024])
 		}
 	}
 }		
+*/
 
 int ios_selectionmenu(int default_ios)
 {
@@ -726,8 +754,6 @@ int ios_selectionmenu(int default_ios)
 	while (true)
 	{
 		printf("\x1B[%d;%dH",0,0);	// move console cursor to x/y
-		printf("\n");
-		printf("\n");
 		printf("Select the IOS to load for FSToolbox : %3d", list[selection]);
 		printf("\nIf you want to acces savedata load IOS 249 or a cIOS\n");
 		printf("Otherwise IOS 36 is the best choice\n");
@@ -774,6 +800,65 @@ while(*dat==' ')dat++;
 
 }*/
 
+
+void update_fstoolbox(int argc, char **argv)
+{
+	resetscreen();
+
+	if(argc == 0 || argv == 0 || *argv == 0) 
+	{
+		printf("Sorry, your launch path is empty\n");
+		sleep(10);
+		exit(0);
+	}
+
+	s32 ret;
+
+	char NETWORK_PATH[1024];
+	char sd[1024];
+
+	sprintf(NETWORK_PATH, "%s", link);
+	sprintf(sd, "%s", *argv);
+
+	printf("Initializing network\n");
+	ret = network_init();
+
+	if(ret < 0) 
+	{
+		printf("INIT failed %d\n", ret);
+		sleep(5);
+		exit(0);
+	}
+	printf(" %s\n", network_getip());
+	printf("\n\n");
+
+	//__io_wiisd.startup();
+	//fatMountSimple("sd", &__io_wiisd);
+	ret = remove(sd);
+	if (ret < 0) 
+	{
+		printf("ERROR could not delete the old file, exitting ...\n");
+		sleep(10);
+		exit(0);
+	} else 
+	{
+		printf("Deleted old file\n");
+	}
+	FILE *file;
+	file = fopen(sd, "wb");
+	if (file < 0)
+	{
+		printf("Error: fopen\n");
+		return 0;
+	}
+
+	u32 length;
+	ReadNetwork(NETWORK_PATH, file, &length, NETWORK_PATH, NETWORK_HOSTNAME);
+	//printf("DOWNLOADED\n");
+	printf("\n\nDownloaded %s to %s\n\n", link, sd);
+}		
+
+
 int main(int argc, char **argv)
 {
 	ent = NULL;
@@ -785,6 +870,7 @@ int main(int argc, char **argv)
 	// sleep(10);
 	int ios;
 	WPAD_Init();
+	WPAD_SetDataFormat(WPAD_CHAN_0, WPAD_FMT_BTNS_ACC_IR);					
 
 	ios = ios_selectionmenu(36);
 	WPAD_Shutdown();
@@ -792,7 +878,8 @@ int main(int argc, char **argv)
 	WPAD_Init();
 	WPAD_SetDataFormat(WPAD_CHAN_0, WPAD_FMT_BTNS_ACC_IR);					
 
-	strcpy(cpath, "/");
+	sprintf(cpath, "/");
+//	strcpy(cpath, "/");
 	Identify_SU();
 	ISFS_Initialize();
 
@@ -844,37 +931,25 @@ int main(int argc, char **argv)
 
 	//if (!MP3Player_IsPlaying()) MP3Player_PlayBuffer(background, background_size, NULL);
 
-
 	resetscreen();
 
-	printf("%s", *argv);
 	printf("FS Toolbox 0.2 by Nicksasa & Wiipower\n\n"); 
-	 
 
+	printf("ALL files will be stored in sd:/FSTOOLBOX !\n\n");
 	printf("Press - to dump file to SD\n");
 	printf("Press + to write file to nand\n");
 	printf("Press 2 on a TMD to change the IOS it uses and fakesign it\n\n");
 
 	printf("Press A to continue\n");
-	printf("Press 1 to UPDATE FS Toolbox to the latest version!\n\n\n");
-
-
-
-	printf("ALL files will be stored in sd:/FSTOOLBOX !\n\n");
-
-	ret = opendir("sd:/FSTOOLBOX");
-	if (!ret)
+	if (argc == 0 || argv == NULL || *argv == NULL)
 	{
-		printf("FSTOOLBOX folder doesnt exist, making it...\n");
-		ret = mkdir("sd:/FSTOOLBOX", 0777);
-		if (ret < 0)
-		{
-			printf("Error making directory %d...\n", ret);
-			sleep(10);
-			exit(0);
-		}
+		printf("Update function not available\n\n");
+
+	} else
+	{
+		printf("Press 1 to UPDATE FS Toolbox to the latest version!\n");
+		printf("The update would be downloaded to: %s\n\n", *argv);
 	}
-	  
 
 	while (1) 
 	{
@@ -887,63 +962,23 @@ int main(int argc, char **argv)
 		}
 		if (buttonsdown & WPAD_BUTTON_1) 
 		{
-			resetscreen();
-			s32 ret;
-
-			char NETWORK_PATH[1024];
-			char sd[1024];
-
-			sprintf(NETWORK_PATH, "%s", link);
-
-			if(argc == 0 || argv == 0 || *argv == 0) 
-			{
-				printf("Sorry, your launch path is empty\n");
-				sleep(10);
-				exit(0);
-			}
-
-			sprintf(sd, "%s", *argv);
-
-			printf("Initializing network\n");
-			ret = network_init();
-
-			if(ret < 0) 
-			{
-				printf("INIT failed %d\n", ret);
-				sleep(5);
-				exit(0);
-			}
-			printf(" %s\n", network_getip());
-			printf("\n\n");
-
-
-			//__io_wiisd.startup();
-			//fatMountSimple("sd", &__io_wiisd);
-			ret = remove(sd);
-			if (ret < 0) 
-			{
-				printf("ERROR could not delete the old file, exitting ...\n");
-				sleep(10);
-				exit(0);
-			} else 
-			{
-				printf("Deleted old file\n");
-			}
-			FILE *file;
-			file = fopen(sd, "wb");
-			if (file < 0)
-			{
-				printf("Error: fopen\n");
-				return 0;
-			}
-			
-
-			u32 length;
-			ReadNetwork(NETWORK_PATH, file, &length, NETWORK_PATH, NETWORK_HOSTNAME);
-			//printf("DOWNLOADED\n");
-			printf("\n\nDownloaded %s to %s\n\n", link, sd);
+			update_fstoolbox(argc, argv);
 		}
 	}
+
+	ret = opendir("sd:/FSTOOLBOX");
+	if (!ret)
+	{
+		printf("FSTOOLBOX folder doesnt exist, making it...\n");
+		ret = mkdir("sd:/FSTOOLBOX", 0777);
+		if (ret < 0)
+		{
+			printf("Error making directory %d...\n", ret);
+			sleep(10);
+			exit(0);
+		}
+	}	  
+	
 	resetscreen();
 	printf(" This software is in beta stadium\n");
 	printf(" A brick prevention methood like BootMii boot2 installation is mandatory\n");
@@ -1099,7 +1134,8 @@ int main(int argc, char **argv)
 		
 		if(buttonsdown & WPAD_BUTTON_1)
 		{
-			dirget(cpath);
+			dumpfolder(cpath, "sd:/FSTOOLBOX");
+			printf("Dumping complete.\n");
 		}
 	
 	}
