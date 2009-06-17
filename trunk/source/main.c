@@ -623,6 +623,74 @@ int browser()
 	}
 }
 
+int dumpdir(char source[1024], char destination[1024])
+{
+printf("Dumping folder: %s\n", source);
+
+	int buttonsdown = 0;
+	WPAD_ScanPads();
+	buttonsdown = WPAD_ButtonsDown(0);
+	if (buttonsdown) 
+	{
+		printf("Exiting...\n");
+		sleep(10);
+		exit(0);
+	}
+	s32 tcnt = 0;
+	int ret;
+	char path[1024];
+	char path2[1024];
+	dirent_t *test = NULL;
+	getdir(source, &test, &tcnt);
+
+	if (strlen(source) == 1)
+	{
+		sprintf(path, "%s", destination);
+	} else
+	{
+		sprintf(path, "%s%s", destination, source);
+	}
+
+	ret = opendir(path);
+	if (!ret)
+	{
+		ret = mkdir(path, 0777);
+		if (ret < 0)
+		{
+			printf("Error making directory %d...\n", ret);
+			sleep(10);
+			exit(0);
+		}
+	}
+	
+	for(i = 0; i < tcnt; i++) 
+	{				
+		if (strlen(source) == 1)
+		{
+			sprintf(path, "%s%s", source, test[i].name);
+		} else
+		{
+			sprintf(path, "%s/%s", source, test[i].name);
+		}
+		
+		if(test[i].type == DIRENT_T_FILE) 
+		{
+			sprintf(path2, "%s%s", destination, path);
+
+			printf("Dumping file: %s\n", path);
+			printf("To: %s\n", path2);
+
+			//sleep(5);
+			dumpfile(path, path2);
+		} 
+		
+		
+		
+	}
+	free(test);
+	printf("Dumping folder %s complete\n", source);
+}	
+
 
 int dumpfolder(char source[1024], char destination[1024])
 {
@@ -638,7 +706,7 @@ int dumpfolder(char source[1024], char destination[1024])
 		exit(0);
 	}
 
-	s32 tcnt;
+	s32 tcnt = 0;
 	int ret;
 	char path[1024];
 	char path2[1024];
@@ -686,14 +754,34 @@ int dumpfolder(char source[1024], char destination[1024])
 			dumpfile(path, path2);
 		} else
 		{
-			if(test[i].type == DIRENT_T_DIR) 
-			{
-				dumpfolder(path, destination);
-			}	
+		if(test[i].type == DIRENT_T_DIR) 
+		{
+		
+			//dumpfolder(path, destination);
+		if(i == tcnt)
+		{
+		for(i = 0; i < tcnt; i++) 
+		{
+	
+		if(test[i].type == DIRENT_T_DIR)
+		{
+		//	getdir(test[i].name, &test, &tcnt);
+		    dumpfolder(test[i].name, destination);
 		}
+		}
+		    
+		} else
+		{
+            dumpdir(path, destination);	
+		}
+		
+		}
+		}
+		
 	}
 	free(test);
 	printf("Dumping folder %s complete\n", source);
+	
 }	
 
 u32 numdir;
