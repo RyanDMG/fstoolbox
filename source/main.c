@@ -611,12 +611,13 @@ int browser()
 //list_t *list2;	
 s32 tcnt;
 s32 ret2;
+
 int files2(char subpath3[1024])
 {
 	//resetscreen();
 	printf("%s\n", subpath3);
 	//sleep(5);
-	dirent_t *test = malloc(32768);
+	dirent_t *test = malloc(sizeof(dirent_t));
 	getdir(subpath3, test, &tcnt);
 	printf("count %d files/dirs\n", tcnt);
 	//sleep(5);
@@ -653,7 +654,7 @@ int dirget(char filepath[1024])
 	files2(filepath);
 	numdir = 0;
 	getdir(filepath, ent, &lcnt);
-	list_t *dir = malloc(32768);
+	list_t *dir = malloc(sizeof(list_t));
 	for(d = 0; d < lcnt; d++) 
 	{
 		if(ent[d].type == DIRENT_T_DIR)
