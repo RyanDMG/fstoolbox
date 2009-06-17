@@ -13,7 +13,6 @@
 #include <fat.h>
 #include <fcntl.h>
 #include <mp3player.h>
-#include <mxml.h>
 #include "id.h"
 #include "sha1.h"
 #include "libpng/pngu/pngu.h"
