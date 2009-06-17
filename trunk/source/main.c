@@ -988,11 +988,13 @@ int main(int argc, char **argv)
 		if(buttonsdown & WPAD_BUTTON_UP)
 		{
 			
-			if(cline > 0)
+			if(cline > 0) {
 				cline--;
-			else
-				cline = lcnt - 1;
-				browser();
+			} else
+			{
+			cline = lcnt - 1;
+			browser();
+			}
 		}
 		if(buttonsdown & WPAD_BUTTON_HOME)
 		{
@@ -1007,11 +1009,12 @@ int main(int argc, char **argv)
 		if(buttonsdown & WPAD_BUTTON_DOWN)
 		{
 			
-			if(cline < (lcnt - 1))
-				cline++;
-			else
-				cline = 0;
-				browser();
+			if(cline < (lcnt - 1)) {
+			cline++;
+			} else
+			cline = 0;
+			browser();
+			}
 		}
 
 		//Enter dir.
