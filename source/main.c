@@ -540,7 +540,7 @@ void getdir(char *path, dirent_t *ent, int *cnt)
 			sprintf(pbuf, "/%s", ebuf);
 		//Dir or file?
 		ent[i].type = ((isdir(pbuf) == 1) ? DIRENT_T_DIR : DIRENT_T_FILE);
-		get_attribs(pbuf, &(ent[i].ownerID), &(ent[i].groupID), &(ent[i].ownerperm), &(ent[i].groupperm), &(ent[i].otherperm));
+		
 	}
 
 	free(nbuf);
@@ -610,13 +610,13 @@ int browser()
 
 //list_t *list2;	
 s32 tcnt;
-
+s32 ret2;
 int files2(char subpath3[1024])
 {
 	//resetscreen();
 	printf("%s\n", subpath3);
 	//sleep(5);
-	dirent_t *test = malloc(ISFS_MAXPATH + 1);
+	dirent_t *test = malloc(32768);
 	getdir(subpath3, test, &tcnt);
 	printf("count %d files/dirs\n", tcnt);
 	//sleep(5);
@@ -626,8 +626,20 @@ int files2(char subpath3[1024])
 		{
 			sprintf(lol, "%s/%s", subpath3, test[i].name);
 			sprintf(lol2, "sd:/FSTOOLBOX%s/%s", subpath3, test[i].name);
+			sprintf(lol4, "sd:/FSTOOLBOX%s", subpath3);
 			printf("filepath : %s\n", lol);
 			printf("sd path : %s\n", lol2);
+			ret2 = opendir(lol4);
+			if (!ret2)
+			{
+			ret2 = mkdir(lol4, 0777);
+			if (ret2 < 0)
+			{
+			printf("Error making directory %d...\n", ret2);
+			sleep(10);
+			exit(0);
+			}
+			}
 			//sleep(5);
 			dump(lol,lol2);
 		} 
@@ -641,7 +653,7 @@ int dirget(char filepath[1024])
 	files2(filepath);
 	numdir = 0;
 	getdir(filepath, ent, &lcnt);
-	list_t *dir = malloc(ISFS_MAXPATH + 1);
+	list_t *dir = malloc(32768);
 	for(d = 0; d < lcnt; d++) 
 	{
 		if(ent[d].type == DIRENT_T_DIR)
@@ -975,7 +987,7 @@ int main(int argc, char **argv)
 		//Navigate up.
 		if(buttonsdown & WPAD_BUTTON_UP)
 		{
-			//TODO check this if
+			
 			if(cline > 0)
 				cline--;
 			else
@@ -994,7 +1006,7 @@ int main(int argc, char **argv)
 		//Navigate down.
 		if(buttonsdown & WPAD_BUTTON_DOWN)
 		{
-			//TODO check this if
+			
 			if(cline < (lcnt - 1))
 				cline++;
 			else
