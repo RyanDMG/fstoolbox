@@ -1012,6 +1012,7 @@ int main(int argc, char **argv)
 			if(cline < (lcnt - 1)) {
 			cline++;
 			} else
+			{
 			cline = 0;
 			browser();
 			}
