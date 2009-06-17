@@ -990,6 +990,7 @@ int main(int argc, char **argv)
 			
 			if(cline > 0) {
 				cline--;
+				browser();
 			} else
 			{
 			cline = lcnt - 1;
@@ -1009,8 +1010,10 @@ int main(int argc, char **argv)
 		if(buttonsdown & WPAD_BUTTON_DOWN)
 		{
 			
-			if(cline < (lcnt - 1)) {
+			if(cline < (lcnt - 1))
+			{
 			cline++;
+			browser();
 			} else
 			{
 			cline = 0;
