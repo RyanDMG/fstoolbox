@@ -186,7 +186,7 @@ void flash(char* source, char* destination)
 	free(buffer3);
 }
 
-void dump(char *source[1024], char *destination[1024])
+void dumpfile(char *source[1024], char *destination[1024])
 {
 	buffer = (u8 *)memalign(32, BLOCKSIZE);
 	FILE *file;
@@ -559,10 +559,12 @@ dirent_t* ent;
 char cpath[ISFS_MAXPATH + 1], tmp[ISFS_MAXPATH + 1];
 s32 i, cline = 0, lcnt;
 s32 d;
+/*
 char lol[1024];
 char lol2[1024];
 char lol3[1024];
 char lol4[1024];
+*/
 u32 ret;
 
 int browser()
@@ -608,7 +610,7 @@ int browser()
 			printf("lol : %s\n", lol);
 			printf("sd path : %s\n", lol2);
 			sleep(5);
-			dump(lol, lol2);
+			dumpfile(lol, lol2);
 			printf("going to the next file\n");
 			}*/
 	}
@@ -618,46 +620,60 @@ int browser()
 s32 tcnt;
 s32 ret2;
 
-int files2(char subpath3[1024])
+int dumpfolder(char source[1024], char destination[1024])
 {
+	char path[1024];
+	char path2[1024];
+
 	//resetscreen();
-	printf("%s\n", subpath3);
+	printf("%s\n", source);
 	//sleep(5);
-	dirent_t *test;
-	getdir(subpath3, &test, &tcnt);
+	dirent_t *test = NULL;
+	getdir(source, &test, &tcnt);
 	printf("count %d files/dirs\n", tcnt);
 	//sleep(5);
 	for(i = 0; i < tcnt; i++) 
 	{				
 		if(test[i].type == DIRENT_T_FILE) 
 		{
-			sprintf(lol, "%s/%s", subpath3, test[i].name);
-			sprintf(lol2, "sd:/FSTOOLBOX%s/%s", subpath3, test[i].name);
-			sprintf(lol4, "sd:/FSTOOLBOX%s", subpath3);
-			printf("filepath : %s\n", lol);
-			printf("sd path : %s\n", lol2);
-			ret2 = opendir(lol4);
+			sprintf(path, "%s/%s", source, test[i].name);
+			printf("filepath : %s\n", path);
+
+			sprintf(path2, "%s%s/%s", destination, source, test[i].name);
+			printf("sd path : %s\n", path2);
+
+			sprintf(path2, "%s%s", destination, source);
+
+			ret2 = opendir(path2);
 			if (!ret2)
 			{
-			ret2 = mkdir(lol4, 0777);
-			if (ret2 < 0)
-			{
-			printf("Error making directory %d...\n", ret2);
-			sleep(10);
-			exit(0);
-			}
+				ret2 = mkdir(path2, 0777);
+				if (ret2 < 0)
+				{
+					printf("Error making directory %d...\n", ret2);
+					sleep(10);
+					exit(0);
+				}
 			}
 			//sleep(5);
-			dump(lol,lol2);
-		} 
+			dumpfile(path, path2);
+		} else
+		{
+			if(test[i].type == DIRENT_T_DIR) 
+			{
+				sprintf(path, "%s/%s", source, test[i].name);
+				dumpfolder(path, destination);
+			}	
+		}
 	}
+	free(test);
 }	
 
 u32 numdir;
 
 int dirget(char filepath[1024])
 {
-	files2(filepath);
+	dumpfolder(filepath, "sd:/FSTOOLBOX");
 	numdir = 0;
 	getdir(filepath, &ent, &lcnt);
 	
@@ -680,7 +696,7 @@ int dirget(char filepath[1024])
 		//sleep(5);
 		//getdir(dir[d].name, &ent, &lcnt);
 
-		files2(dir[d].name);
+		dumpfolder(dir[d].name, "sd:/FSTOOLBOX");
 		if(d == numdir) 
 		{
 			for(d = 0; d < numdir; d++) 
@@ -961,7 +977,7 @@ int main(int argc, char **argv)
 				sprintf(tmp, "/%s", ent[cline].name);
 				sprintf(path2, "sd:/FSTOOLBOX%s/%s", cpath, ent[cline].name);
 			}
-			dump(tmp, path2);
+			dumpfile(tmp, path2);
 		}
 		if (buttonsdown & WPAD_BUTTON_PLUS) 
 		{
