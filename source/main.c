@@ -465,8 +465,6 @@ void patch(char tmd[500], u32 ios)
 	free(buffer2);
 }
 
-char *nbuf, ebuf[ISFS_MAXPATH + 1], pbuf[ISFS_MAXPATH + 1];
-
 int isdir(char *path)
 {
 	s32 res;
@@ -488,7 +486,7 @@ void get_attribs(char *path, u32 *ownerID, u16 *groupID, u8 *ownerperm, u8 *grou
 		printf("Error getting attributes of %s! (result = %d)\n", path, res);
 }
 
-void getdir(char *path, dirent_t *ent, int *cnt)
+void getdir(char *path, dirent_t **ent, int *cnt)
 {
 	s32 res;
 	u32 num = 0;
@@ -504,7 +502,10 @@ void getdir(char *path, dirent_t *ent, int *cnt)
 	}
 
 	//Allocate aligned buffer.
-	nbuf = (char *)memalign(32, (ISFS_MAXPATH + 1) * num);
+	char *nbuf = (char *)memalign(32, (ISFS_MAXPATH + 1) * num);
+	char ebuf[ISFS_MAXPATH + 1];
+	char pbuf[ISFS_MAXPATH + 1];
+
 	if(nbuf == NULL)
 	{
 		printf("Error: could not allocate buffer for name list!\n");
@@ -522,6 +523,12 @@ void getdir(char *path, dirent_t *ent, int *cnt)
 	//Set entry cnt.
 	*cnt = num;
 
+	if (*ent)
+	{
+		free(*ent);
+	}
+	*ent = malloc(sizeof(dirent_t) * num);
+
 	//Split up the name list.
 	for(i = 0, k = 0; i < num; i++)
 	{
@@ -532,25 +539,24 @@ void getdir(char *path, dirent_t *ent, int *cnt)
 		k++;
 
 		//Fill in the dir name.
-		strcpy(ent[i].name, ebuf);
+		strcpy((*ent)[i].name, ebuf);
 		//Build full path.
 		if(strcmp(path, "/") != 0)
 			sprintf(pbuf, "%s/%s", path, ebuf);
 		else
 			sprintf(pbuf, "/%s", ebuf);
 		//Dir or file?
-		ent[i].type = ((isdir(pbuf) == 1) ? DIRENT_T_DIR : DIRENT_T_FILE);
+		(*ent)[i].type = ((isdir(pbuf) == 1) ? DIRENT_T_DIR : DIRENT_T_FILE);
 		
 	}
-
 	free(nbuf);
 }
 
 
 char path2[500];
 char path3[500];
-dirent_t ent[500];
-	char cpath[ISFS_MAXPATH + 1], tmp[ISFS_MAXPATH + 1];
+dirent_t* ent;
+char cpath[ISFS_MAXPATH + 1], tmp[ISFS_MAXPATH + 1];
 s32 i, cline = 0, lcnt;
 s32 d;
 char lol[1024];
@@ -568,7 +574,7 @@ int browser()
 	printf(" press 2 to patch ios version in a TMD and fakesign it\n\n");
 	printf("  NAME          TYPE     OID    GID    OP   GP   OTP\n");
 		
-	getdir(cpath, ent, &lcnt);
+	getdir(cpath, &ent, &lcnt);
 	for(i = 0; i < lcnt; i++) 
 	{
 		printf("%s %-12s  %s - %-4x | %-4x | %s | %s | %s\n", 
@@ -617,8 +623,8 @@ int files2(char subpath3[1024])
 	//resetscreen();
 	printf("%s\n", subpath3);
 	//sleep(5);
-	dirent_t *test = malloc(sizeof(dirent_t));
-	getdir(subpath3, test, &tcnt);
+	dirent_t *test;
+	getdir(subpath3, &test, &tcnt);
 	printf("count %d files/dirs\n", tcnt);
 	//sleep(5);
 	for(i = 0; i < tcnt; i++) 
@@ -653,8 +659,11 @@ int dirget(char filepath[1024])
 {
 	files2(filepath);
 	numdir = 0;
-	getdir(filepath, ent, &lcnt);
-	list_t *dir = malloc(sizeof(list_t));
+	getdir(filepath, &ent, &lcnt);
+	
+	//TODO allocate only the necessary memory
+	list_t *dir = malloc(sizeof(list_t) * lcnt);
+	
 	for(d = 0; d < lcnt; d++) 
 	{
 		if(ent[d].type == DIRENT_T_DIR)
@@ -669,7 +678,7 @@ int dirget(char filepath[1024])
 	{
 		printf("%s\n", dir[d].name);
 		//sleep(5);
-		//getdir(dir[d].name, ent, &lcnt);
+		//getdir(dir[d].name, &ent, &lcnt);
 
 		files2(dir[d].name);
 		if(d == numdir) 
@@ -751,6 +760,7 @@ while(*dat==' ')dat++;
 
 int main(int argc, char **argv)
 {
+	ent = NULL;
 	s32 ret;
 	sys_init();
 	// char *dat;
@@ -1036,7 +1046,7 @@ int main(int argc, char **argv)
 				{				
 					sprintf(cpath, "/%s", ent[cline].name);
 				}
-				getdir(cpath, ent, &lcnt);
+				getdir(cpath, &ent, &lcnt);
 				printf("cline :%s\n", cpath);
 				cline = 0;
 				sprintf(path3, "sd:/FSTOOLBOX%s", cpath);
@@ -1066,7 +1076,7 @@ int main(int argc, char **argv)
 			else
 				cpath[i] = 0;
 				
-			getdir(cpath, ent, &lcnt);
+			getdir(cpath, &ent, &lcnt);
 			cline = 0;
 			browser();
 		}
