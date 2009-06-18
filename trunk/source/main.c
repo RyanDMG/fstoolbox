@@ -559,7 +559,7 @@ void getdir(char *path, dirent_t **ent, int *cnt)
 }
 
 
-int browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
+void browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 {
 	int i;
 	resetscreen();
@@ -568,7 +568,7 @@ int browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 	printf(" press 2 to patch ios version in a TMD and fakesign it\n\n");
 	printf("  NAME          TYPE     OID    GID    OP   GP   OTP\n");
 		
-	for(i = 0; i < lcnt; i++) 
+	for(i = (cline / 15)*15; i < lcnt && i < (cline / 15)*15+15; i++) 
 	{
 		printf("%s %-12s  %s - %-4x | %-4x | %s | %s | %s\n", 
 				(i == cline ? ">" : " "),
@@ -580,13 +580,6 @@ int browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 				(ent[i].groupperm == 1 ? "r." : (ent[i].groupperm == 3 ? "rw" : "..")),
 				(ent[i].otherperm == 1 ? "r." : (ent[i].otherperm == 3 ? "rw" : ".."))
 			);
-		if( i > 20) 
-		{
-			if(i > (cline + 1)) 
-			{
-				break;
-			}
-		}
 			/*if(cline > (i + 15)) {
 			i = cline;
 			};*/
@@ -605,7 +598,6 @@ int browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 			printf("going to the next file\n");
 			}*/
 	}
-	return lcnt;
 }
 
 
