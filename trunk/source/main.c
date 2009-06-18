@@ -20,9 +20,7 @@
 #include "sha1.h"
 #include "net.h"
 
-
 #define BLOCKSIZE 2048
-#define DUMP_BUF_SIZE 256
 
 #define DIRENT_T_FILE 0
 #define DIRENT_T_DIR 1
@@ -64,19 +62,6 @@ typedef struct _list
 /* Video pointers */
 static GXRModeObj *rmode = NULL;
 u32 *xfb;
-
-u32 ownerID;
-u16 groupID;
-u8 attributes;
-u8 ownerperm;
-u8 groupperm;
-u8 otherperm;
-long lSize;
-
-dir_t *dir;
-
-u8 *buffer;
-fstats *status;
 
 static void sys_init(void)
 {
@@ -121,13 +106,6 @@ static void sys_init(void)
 void resetscreen()
 {
 	printf("\x1b[J");
-
-/*	//Clear screen.
-	VIDEO_ClearFrameBuffer(rmode, xfb, COLOR_BLACK);
-	//Set cursor to 1, 0.
-	printf("\x1b[1;0H");
-	//Gui_DrawBackground();
-*/
 }
 
 void flash(char* source, char* destination)
@@ -194,15 +172,15 @@ void flash(char* source, char* destination)
 	free(buffer3);
 }
 
-void dumpfile(char *source[1024], char *destination[1024])
+void dumpfile(char source[1024], char destination[1024])
 {
-	buffer = (u8 *)memalign(32, BLOCKSIZE);
+	u8 *buffer;
+	fstats *status;
+
 	FILE *file;
 	int fd;
 	s32 ret;
 	u32 size;
-		
-	status = memalign(32, sizeof(fstats) );
 
 	fd = ISFS_Open(source, ISFS_OPEN_READ);
 	if (fd < 0) 
@@ -210,6 +188,7 @@ void dumpfile(char *source[1024], char *destination[1024])
 		printf("Error: ISFS_OpenFile(%s) returned %d\n", source, fd);
 		return;
 	}
+	
 	file = fopen(destination, "wb");
 	if (!file)
 	{
@@ -217,16 +196,19 @@ void dumpfile(char *source[1024], char *destination[1024])
 		sleep(20);
 	}
 
+	status = memalign(32, sizeof(fstats) );
 	ret = ISFS_GetFileStats(fd, status);
 	if (ret < 0)
 	{
 		printf("ISFS_GetFileStats(fd) returned %d\n", ret);
+		free(status);
 		return;
 	}
 	printf("Filesize: %u\n", status->file_length);
 
 	printf("Dumping file...\n\n");
 
+	buffer = (u8 *)memalign(32, BLOCKSIZE);
 	u32 restsize = status->file_length;
 	while (restsize > 0)
 	{
@@ -241,6 +223,8 @@ void dumpfile(char *source[1024], char *destination[1024])
 		if (ret < 0)
 		{
 			printf("ISFS_Read(%d, %p, %d) returned %d\n", fd, buffer, size, ret);
+			free(status);
+			free(buffer);
 			return;
 		}
 		ret = fwrite(buffer, 1, size, file);
@@ -389,7 +373,7 @@ int ios_selection(int default_ios)
 }
 
 
-void patch(char tmd[500], u32 ios)
+bool patch(char tmd[500], u32 ios)
 {
 	s32 ret;
 	s32 nandfile;
@@ -397,7 +381,7 @@ void patch(char tmd[500], u32 ios)
 	if (nandfile < 0) 
 	{
 		printf("Error: ISFS_OpenFile returned %d\n", nandfile);
-		return 1;
+		return false;
 	}	
 
 	fstats *status = memalign( 32, sizeof(fstats) );
@@ -406,7 +390,7 @@ void patch(char tmd[500], u32 ios)
 	if (ret < 0)
 	{
 		printf("ISFS_GetFileStats(fd) returned %d\n", ret);
-		return;
+		return false;
 	}
 
 	printf("Filesize: %u\n", status->file_length);
@@ -417,7 +401,7 @@ void patch(char tmd[500], u32 ios)
 	if (ret < 0)
 	{
 		printf("ISFS_Read(%d, %p, %d) returned %d\n", nandfile, buffer2, status->file_length, ret);
-		return;
+		return false;
 	}
 	ISFS_Close(nandfile);
 
@@ -445,8 +429,8 @@ void patch(char tmd[500], u32 ios)
 						
 	printf("\nPatching TMD to use IOS %d\n", ios2);
 
-	zero_sig(buffer2);
-	brute_tmd(SIGNATURE_PAYLOAD(buffer2));
+	zero_sig((signed_blob *)buffer2);
+	brute_tmd(SIGNATURE_PAYLOAD((signed_blob *)buffer2));
 	//buffer[0x18B] = 0x24;
 	buffer2[0x18B] = ios2;
 	ISFS_Delete(tmd);
@@ -456,7 +440,7 @@ void patch(char tmd[500], u32 ios)
 	if (nandfile < 0) 
 	{
 		printf("Error: ISFS_OpenFile returned %d\n", nandfile);
-		return 1;
+		return false;
 	}	
 
 	//ISFS_Seek(nandfile, 0x0, SEEK_SET);
@@ -471,6 +455,8 @@ void patch(char tmd[500], u32 ios)
 	ISFS_Close(nandfile);
 	free(status);
 	free(buffer2);
+	
+	return true;
 }
 
 int isdir(char *path)
@@ -564,18 +550,9 @@ void getdir(char *path, dirent_t **ent, int *cnt)
 char path2[500];
 char path3[500];
 dirent_t* ent;
-char cpath[ISFS_MAXPATH + 1], tmp[ISFS_MAXPATH + 1];
-s32 cline = 0, lcnt;
-s32 d;
-/*
-char lol[1024];
-char lol2[1024];
-char lol3[1024];
-char lol4[1024];
-*/
-u32 ret;
+char tmp[ISFS_MAXPATH + 1];
 
-int browser()
+int browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 {
 	int i;
 	resetscreen();
@@ -584,7 +561,6 @@ int browser()
 	printf(" press 2 to patch ios version in a TMD and fakesign it\n\n");
 	printf("  NAME          TYPE     OID    GID    OP   GP   OTP\n");
 		
-	getdir(cpath, &ent, &lcnt);
 	for(i = 0; i < lcnt; i++) 
 	{
 		printf("%s %-12s  %s - %-4x | %-4x | %s | %s | %s\n", 
@@ -622,10 +598,11 @@ int browser()
 			printf("going to the next file\n");
 			}*/
 	}
+	return lcnt;
 }
 
 
-int dumpfolder(char source[1024], char destination[1024])
+bool dumpfolder(char source[1024], char destination[1024])
 {
 	printf("Dumping folder: %s\n", source);
 	
@@ -635,7 +612,7 @@ int dumpfolder(char source[1024], char destination[1024])
 	if (buttonsdown) 
 	{
 		printf("Exiting...\n");
-		sleep(10);
+		sleep(5);
 		exit(0);
 	}
 
@@ -655,8 +632,8 @@ int dumpfolder(char source[1024], char destination[1024])
 		sprintf(path, "%s%s", destination, source);
 	}
 
-	ret = opendir(path);
-	if (!ret)
+	ret = (u32)opendir(path);
+	if (ret == 0)
 	{
 		ret = mkdir(path, 0777);
 		if (ret < 0)
@@ -696,6 +673,7 @@ int dumpfolder(char source[1024], char destination[1024])
 	}
 	free(test);
 	printf("Dumping folder %s complete\n", source);
+	return true;
 }	
 
 u32 numdir;
@@ -803,7 +781,7 @@ while(*dat==' ')dat++;
 }*/
 
 
-void update_fstoolbox(int argc, char **argv)
+bool update_fstoolbox(int argc, char **argv)
 {
 	resetscreen();
 
@@ -834,8 +812,6 @@ void update_fstoolbox(int argc, char **argv)
 	printf(" %s\n", network_getip());
 	printf("\n\n");
 
-	//__io_wiisd.startup();
-	//fatMountSimple("sd", &__io_wiisd);
 	ret = remove(sd);
 	if (ret < 0) 
 	{
@@ -851,13 +827,14 @@ void update_fstoolbox(int argc, char **argv)
 	if (file < 0)
 	{
 		printf("Error: fopen\n");
-		return 0;
+		return false;
 	}
 
 	u32 length;
 	ReadNetwork(NETWORK_PATH, file, &length, NETWORK_PATH, NETWORK_HOSTNAME);
 	//printf("DOWNLOADED\n");
 	printf("\n\nDownloaded %s to %s\n\n", link, sd);
+	return true;
 }		
 
 
@@ -866,6 +843,10 @@ int main(int argc, char **argv)
 	ent = NULL;
 	s32 ret;
 	int i;
+	int lcnt;
+	s32 cline = 0;
+	char cpath[ISFS_MAXPATH + 1];	
+
 	sys_init();
 	// char *dat;
 	// config("sd:/test.txt", &dat);
@@ -969,8 +950,8 @@ int main(int argc, char **argv)
 		}
 	}
 
-	ret = opendir("sd:/FSTOOLBOX");
-	if (!ret)
+	ret = (u32)opendir("sd:/FSTOOLBOX");
+	if (ret == 0)
 	{
 		printf("FSTOOLBOX folder doesnt exist, making it...\n");
 		ret = mkdir("sd:/FSTOOLBOX", 0777);
@@ -998,7 +979,10 @@ int main(int argc, char **argv)
 	sleep(1);
 	resetscreen();
 
-	browser();
+	getdir(cpath, &ent, &lcnt);
+	cline = 0;
+	browser(cpath, ent, cline, lcnt);
+	
 	while (1) 
 	{
 		WPAD_ScanPads();
@@ -1033,7 +1017,7 @@ int main(int argc, char **argv)
 		
 		/*if (buttonsdown & WPAD_BUTTON_1) 
 		{
-			browser();
+			browser(cpath, ent, cline, lcnt);
 		}*/
 		if (buttonsdown & WPAD_BUTTON_2) 
 		{
@@ -1047,19 +1031,20 @@ int main(int argc, char **argv)
 			resetscreen();
 			patch(tmp, ios);
 			sleep(5);
-			browser();
+			browser(cpath, ent, cline, lcnt);
 		}
 		//Navigate up.
 		if(buttonsdown & WPAD_BUTTON_UP)
 		{
 			
-			if(cline > 0) {
+			if(cline > 0) 
+			{
 				cline--;
-				browser();
+				browser(cpath, ent, cline, lcnt);
 			} else
 			{
-			cline = lcnt - 1;
-			browser();
+				cline = lcnt - 1;
+				browser(cpath, ent, cline, lcnt);
 			}
 		}
 		if(buttonsdown & WPAD_BUTTON_HOME)
@@ -1077,12 +1062,12 @@ int main(int argc, char **argv)
 			
 			if(cline < (lcnt - 1))
 			{
-			cline++;
-			browser();
+				cline++;
+				browser(cpath, ent, cline, lcnt);
 			} else
 			{
-			cline = 0;
-			browser();
+				cline = 0;
+				browser(cpath, ent, cline, lcnt);
 			}
 		}
 
@@ -1101,11 +1086,11 @@ int main(int argc, char **argv)
 					sprintf(cpath, "/%s", ent[cline].name);
 				}
 				getdir(cpath, &ent, &lcnt);
-				printf("cline :%s\n", cpath);
 				cline = 0;
+				printf("cline :%s\n", cpath);
 				sprintf(path3, "sd:/FSTOOLBOX%s", cpath);
-				ret = opendir(path3);
-				if (!ret)
+				ret = (u32)opendir(path3);
+				if (ret == 0)
 				{
 					printf("Folder %s does not exist, making it...\n", path3);
 					ret = mkdir(path3, 0777);
@@ -1117,7 +1102,7 @@ int main(int argc, char **argv)
 					}
 				}
 			}
-			browser();
+			browser(cpath, ent, cline, lcnt);
 		}
 			
 		//Enter parent dir.
@@ -1132,7 +1117,7 @@ int main(int argc, char **argv)
 				
 			getdir(cpath, &ent, &lcnt);
 			cline = 0;
-			browser();
+			browser(cpath, ent, cline, lcnt);
 		}
 		
 		if(buttonsdown & WPAD_BUTTON_1)
