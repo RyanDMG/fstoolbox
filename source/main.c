@@ -63,6 +63,20 @@ typedef struct _list
 static GXRModeObj *rmode = NULL;
 u32 *xfb;
 
+s32 waitforbuttonpress()
+{
+	s32 pressed;
+	while (true)
+	{
+		WPAD_ScanPads();
+		pressed = WPAD_ButtonsDown(0);
+		if(pressed) 
+		{
+			return pressed;
+		}
+	}
+}
+
 static void sys_init(void)
 {
 	// Initialise the video system
@@ -204,9 +218,7 @@ void dumpfile(char source[1024], char destination[1024])
 		free(status);
 		return;
 	}
-	printf("Filesize: %u\n", status->file_length);
-
-	printf("Dumping file...\n\n");
+	printf("File: %s, filesize: %uKB\nDumping...", source, (status->file_length / 1024)+1);
 
 	buffer = (u8 *)memalign(32, BLOCKSIZE);
 	u32 restsize = status->file_length;
@@ -240,7 +252,7 @@ void dumpfile(char source[1024], char destination[1024])
 	fclose(file);
 	free(status);
 	free(buffer);
-	printf("Dumped file !\n");
+	printf("complete\n");
 }
 
 void zero_sig(signed_blob *sig) 
@@ -547,11 +559,6 @@ void getdir(char *path, dirent_t **ent, int *cnt)
 }
 
 
-char path2[500];
-char path3[500];
-dirent_t* ent;
-char tmp[ISFS_MAXPATH + 1];
-
 int browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 {
 	int i;
@@ -604,7 +611,7 @@ int browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 
 bool dumpfolder(char source[1024], char destination[1024])
 {
-	printf("Dumping folder: %s\n", source);
+	printf("Entering folder: %s\n", source);
 	
 	int buttonsdown = 0;
 	WPAD_ScanPads();
@@ -658,8 +665,8 @@ bool dumpfolder(char source[1024], char destination[1024])
 		{
 			sprintf(path2, "%s%s", destination, path);
 
-			printf("Dumping file: %s\n", path);
-			printf("To: %s\n", path2);
+			//printf("Dumping file: %s\n", path);
+			//printf("To: %s\n", path2);
 
 			//sleep(5);
 			dumpfile(path, path2);
@@ -672,7 +679,7 @@ bool dumpfolder(char source[1024], char destination[1024])
 		}
 	}
 	free(test);
-	printf("Dumping folder %s complete\n", source);
+	printf("Dumping folder %s complete\n\n", source);
 	return true;
 }	
 
@@ -840,22 +847,27 @@ bool update_fstoolbox(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-	ent = NULL;
+	char path2[500];
+	char path3[500];
+	char tmp[ISFS_MAXPATH + 1];
+
 	s32 ret;
 	int i;
+
+	char cpath[ISFS_MAXPATH + 1];	
+	dirent_t* ent = NULL;
 	int lcnt;
 	s32 cline = 0;
-	char cpath[ISFS_MAXPATH + 1];	
 
 	sys_init();
 	// char *dat;
 	// config("sd:/test.txt", &dat);
 	// printf("%s", dat);
 	// sleep(10);
-	int ios;
 	WPAD_Init();
 	WPAD_SetDataFormat(WPAD_CHAN_0, WPAD_FMT_BTNS_ACC_IR);					
 
+	int ios;
 	ios = ios_selectionmenu(36);
 	WPAD_Shutdown();
 	IOS_ReloadIOS(ios);
@@ -1123,10 +1135,11 @@ int main(int argc, char **argv)
 		if(buttonsdown & WPAD_BUTTON_1)
 		{
 			dumpfolder(cpath, "sd:/FSTOOLBOX");
-			printf("Dumping complete.\n");
+			printf("Dumping complete. Press any button to continue...\n");
+			waitforbuttonpress();
+			browser(cpath, ent, cline, lcnt);
 		}
 	
-	}
-		
+	}		
 	
 }
