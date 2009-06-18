@@ -558,28 +558,26 @@ void getdir(char *path, dirent_t **ent, int *cnt)
 	free(nbuf);
 }
 
-
+		
 void browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 {
 	int i;
 	resetscreen();
-	printf(" Press - & + to update fstoolbox to the latest version !\n");
-	printf(" Press - to dump file to SD, press + to write file from SD to NAND or\n");
-	printf(" press 2 to patch ios version in a TMD and fakesign it\n\n");
-	printf("  NAME          TYPE     OID    GID    OP   GP   OTP\n");
+	printf("Press 1 to dump the dir you're currently in, you can dump the whole nand FS!\n");
+	printf("Press - to dump file to SD, press + to write file from SD to NAND or\n");
+	printf("press 2 to patch ios version in a TMD and fakesign it\n\n");
+	printf("  NAME          TYPE    \n");
 		
 	for(i = (cline / 15)*15; i < lcnt && i < (cline / 15)*15+15; i++) 
 	{
-		printf("%s %-12s  %s - %-4x | %-4x | %s | %s | %s\n", 
+		printf("%s %-12s  %s\n", 
 				(i == cline ? ">" : " "),
 				ent[i].name,
-				(ent[i].type == DIRENT_T_DIR ? "[DIR] " : "[FILE]"),
-				ent[i].ownerID,
-				ent[i].groupID,
-				(ent[i].ownerperm == 1 ? "r." : (ent[i].ownerperm == 3 ? "rw" : "..")),
-				(ent[i].groupperm == 1 ? "r." : (ent[i].groupperm == 3 ? "rw" : "..")),
-				(ent[i].otherperm == 1 ? "r." : (ent[i].otherperm == 3 ? "rw" : ".."))
+				(ent[i].type == DIRENT_T_DIR ? "[DIR] " : "[FILE]")
+				
 			);
+		
+				
 			/*if(cline > (i + 15)) {
 			i = cline;
 			};*/
@@ -598,6 +596,8 @@ void browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 			printf("going to the next file\n");
 			}*/
 	}
+	
+	printf("\nYou are currently in %s\n", cpath);
 }
 
 
@@ -921,11 +921,12 @@ int main(int argc, char **argv)
 
 	resetscreen();
 
-	printf("FS Toolbox 0.2 by Nicksasa & Wiipower\n\n"); 
+	printf("FS Toolbox 0.3 by Nicksasa & Wiipower\n\n"); 
 
 	printf("ALL files will be stored in sd:/FSTOOLBOX !\n\n");
 	printf("Press - to dump file to SD\n");
 	printf("Press + to write file to nand\n");
+	printf("Press 1 to dump the dir you are currently in, you can dump the whole nand FS!\n");
 	printf("Press 2 on a TMD to change the IOS it uses and fakesign it\n\n");
 
 	printf("Press A to continue\n");
