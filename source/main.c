@@ -58,7 +58,6 @@ typedef struct _list
 
 } list_t;
 
-
 /* Video pointers */
 static GXRModeObj *rmode = NULL;
 u32 *xfb;
@@ -492,6 +491,26 @@ void get_attribs(char *path, u32 *ownerID, u16 *groupID, u8 *ownerperm, u8 *grou
 		printf("Error getting attributes of %s! (result = %d)\n", path, res);
 }
 
+s32 __FileCmp(const void *a, const void *b)
+{
+	dirent_t *hdr1 = (dirent_t *)a;
+	dirent_t *hdr2 = (dirent_t *)b;
+	
+	if (hdr1->type == hdr2->type)
+	{
+		return strcmp(hdr1->name, hdr2->name);
+	} else
+	{
+		if (hdr1->type == DIRENT_T_DIR)
+		{
+			return -1;
+		} else
+		{
+			return 1;
+		}
+	}
+}
+
 void getdir(char *path, dirent_t **ent, int *cnt)
 {
 	s32 res;
@@ -555,6 +574,8 @@ void getdir(char *path, dirent_t **ent, int *cnt)
 		(*ent)[i].type = ((isdir(pbuf) == 1) ? DIRENT_T_DIR : DIRENT_T_FILE);
 		
 	}
+	qsort(*ent, *cnt, sizeof(dirent_t), __FileCmp);
+	
 	free(nbuf);
 }
 
@@ -563,9 +584,10 @@ void browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 {
 	int i;
 	resetscreen();
-	printf("Press 1 to dump the dir you're currently in, you can dump the whole nand FS!\n");
-	printf("Press - to dump file to SD, press + to write file from SD to NAND or\n");
+	printf("Press - to dump file to SD, press + to write file from SD to NAND\n");
+	printf("Press 1 to dump the dir you're currently in, including all sub dirs\n");
 	printf("press 2 to patch ios version in a TMD and fakesign it\n\n");
+	printf("Path: %s\n\n", cpath);
 	printf("  NAME          TYPE    \n");
 		
 	for(i = (cline / 15)*15; i < lcnt && i < (cline / 15)*15+15; i++) 
@@ -573,8 +595,7 @@ void browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 		printf("%s %-12s  %s\n", 
 				(i == cline ? ">" : " "),
 				ent[i].name,
-				(ent[i].type == DIRENT_T_DIR ? "[DIR] " : "[FILE]")
-				
+				(ent[i].type == DIRENT_T_DIR ? "[DIR] " : "[FILE]")				
 			);
 		
 				
@@ -596,8 +617,6 @@ void browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 			printf("going to the next file\n");
 			}*/
 	}
-	
-	printf("\nYou are currently in %s\n", cpath);
 }
 
 
@@ -674,45 +693,6 @@ bool dumpfolder(char source[1024], char destination[1024])
 	printf("Dumping folder %s complete\n\n", source);
 	return true;
 }	
-
-u32 numdir;
-/*
-int dirget(char filepath[1024])
-{
-	dumpfolder(filepath, "sd:/FSTOOLBOX");
-	numdir = 0;
-	getdir(filepath, &ent, &lcnt);
-	
-	//TODO allocate only the necessary memory
-	list_t *dir = malloc(sizeof(list_t) * lcnt);
-	
-	for(d = 0; d < lcnt; d++) 
-	{
-		if(ent[d].type == DIRENT_T_DIR)
-		{
-			sprintf(dir[numdir].name, "%s/%s", filepath, ent[d].name);
-			numdir ++;
-		}
-	}
-	printf("%d Numbers of dirs...\n", numdir);
-	//sleep(5);
-	for(d = 0; d < numdir; d++) 
-	{
-		printf("%s\n", dir[d].name);
-		//sleep(5);
-		//getdir(dir[d].name, &ent, &lcnt);
-
-		dumpfolder(dir[d].name, "sd:/FSTOOLBOX");
-		if(d == numdir) 
-		{
-			for(d = 0; d < numdir; d++) 
-			{
-				dirget(dir[d].name);
-			}
-		}
-	}
-}		
-*/
 
 int ios_selectionmenu(int default_ios)
 {
@@ -836,7 +816,6 @@ bool update_fstoolbox(int argc, char **argv)
 	return true;
 }		
 
-
 int main(int argc, char **argv)
 {
 	char path2[500];
@@ -926,7 +905,7 @@ int main(int argc, char **argv)
 	printf("ALL files will be stored in sd:/FSTOOLBOX !\n\n");
 	printf("Press - to dump file to SD\n");
 	printf("Press + to write file to nand\n");
-	printf("Press 1 to dump the dir you are currently in, you can dump the whole nand FS!\n");
+	printf("Press 1 to dump the dir you're currently in, including all sub dirs\n");
 	printf("Press 2 on a TMD to change the IOS it uses and fakesign it\n\n");
 
 	printf("Press A to continue\n");
@@ -993,87 +972,46 @@ int main(int argc, char **argv)
 		WPAD_ScanPads();
 	
 		int buttonsdown = WPAD_ButtonsDown(0);
-		if (buttonsdown & WPAD_BUTTON_MINUS) 
-		{
-			if(ent[cline].type == DIRENT_T_FILE)
-			{
-				sprintf(tmp, "%s/%s", cpath, ent[cline].name);
-				sprintf(path2, "sd:/FSTOOLBOX%s/%s", cpath, ent[cline].name);
-			} else
-			{
-				sprintf(tmp, "/%s", ent[cline].name);
-				sprintf(path2, "sd:/FSTOOLBOX%s/%s", cpath, ent[cline].name);
-			}
-			dumpfile(tmp, path2);
-		}
-		if (buttonsdown & WPAD_BUTTON_PLUS) 
-		{
-			if(ent[cline].type == DIRENT_T_FILE)
-			{
-				sprintf(tmp, "%s/%s", cpath, ent[cline].name);
-				sprintf(path2, "sd:/FSTOOLBOX%s/%s", cpath, ent[cline].name);
-			} else
-			{
-				sprintf(tmp, "/%s", ent[cline].name);
-				sprintf(path2, "sd:/FSTOOLBOX%s/%s", cpath, ent[cline].name);
-			}
-			flash(path2, tmp);
-		}
-		
-		/*if (buttonsdown & WPAD_BUTTON_1) 
-		{
-			browser(cpath, ent, cline, lcnt);
-		}*/
-		if (buttonsdown & WPAD_BUTTON_2) 
-		{
-			if(ent[cline].type == DIRENT_T_FILE)
-			{
-				sprintf(tmp, "%s/%s", cpath, ent[cline].name);
-			} else
-			{
-				sprintf(tmp, "/%s", ent[cline].name);
-			}
-			resetscreen();
-			patch(tmp, ios);
-			sleep(5);
-			browser(cpath, ent, cline, lcnt);
-		}
+
 		//Navigate up.
 		if(buttonsdown & WPAD_BUTTON_UP)
-		{
-			
+		{			
 			if(cline > 0) 
 			{
 				cline--;
-				browser(cpath, ent, cline, lcnt);
 			} else
 			{
 				cline = lcnt - 1;
-				browser(cpath, ent, cline, lcnt);
 			}
+			browser(cpath, ent, cline, lcnt);
 		}
-		if(buttonsdown & WPAD_BUTTON_HOME)
-		{
-			exit(0);
-			//WII_LaunchTitle(0x0001000848414C50);
-		
-			//WII_OpenURL("http://nicksasa.x10hosting.com/spam.html");
-		}
-
 
 		//Navigate down.
 		if(buttonsdown & WPAD_BUTTON_DOWN)
 		{
-			
 			if(cline < (lcnt - 1))
 			{
 				cline++;
-				browser(cpath, ent, cline, lcnt);
 			} else
 			{
 				cline = 0;
-				browser(cpath, ent, cline, lcnt);
 			}
+			browser(cpath, ent, cline, lcnt);
+		}
+
+		//Enter parent dir.
+		if(buttonsdown & WPAD_BUTTON_B)
+		{
+			int len = strlen(cpath);
+			for(i = len; cpath[i] != '/'; i--);
+			if(i == 0)
+				strcpy(cpath, "/");
+			else
+				cpath[i] = 0;
+				
+			getdir(cpath, &ent, &lcnt);
+			cline = 0;
+			browser(cpath, ent, cline, lcnt);
 		}
 
 		//Enter dir.
@@ -1109,28 +1047,65 @@ int main(int argc, char **argv)
 			}
 			browser(cpath, ent, cline, lcnt);
 		}
-			
-		//Enter parent dir.
-		if(buttonsdown & WPAD_BUTTON_B)
-		{
-			int len = strlen(cpath);
-			for(i = len; cpath[i] != '/'; i--);
-			if(i == 0)
-				strcpy(cpath, "/");
-			else
-				cpath[i] = 0;
-				
-			getdir(cpath, &ent, &lcnt);
-			cline = 0;
-			browser(cpath, ent, cline, lcnt);
-		}
 		
+		//Dump folder
 		if(buttonsdown & WPAD_BUTTON_1)
 		{
 			dumpfolder(cpath, "sd:/FSTOOLBOX");
 			printf("Dumping complete. Press any button to continue...\n");
 			waitforbuttonpress();
 			browser(cpath, ent, cline, lcnt);
+		}
+
+		//Dump file
+		if (buttonsdown & WPAD_BUTTON_MINUS) 
+		{
+			if(ent[cline].type == DIRENT_T_FILE)
+			{
+				sprintf(tmp, "%s/%s", cpath, ent[cline].name);
+				sprintf(path2, "sd:/FSTOOLBOX%s/%s", cpath, ent[cline].name);
+			} else
+			{
+				sprintf(tmp, "/%s", ent[cline].name);
+				sprintf(path2, "sd:/FSTOOLBOX%s/%s", cpath, ent[cline].name);
+			}
+			dumpfile(tmp, path2);
+		}
+		
+		//Flash file
+		if (buttonsdown & WPAD_BUTTON_PLUS) 
+		{
+			if(ent[cline].type == DIRENT_T_FILE)
+			{
+				sprintf(tmp, "%s/%s", cpath, ent[cline].name);
+				sprintf(path2, "sd:/FSTOOLBOX%s/%s", cpath, ent[cline].name);
+			} else
+			{
+				sprintf(tmp, "/%s", ent[cline].name);
+				sprintf(path2, "sd:/FSTOOLBOX%s/%s", cpath, ent[cline].name);
+			}
+			flash(path2, tmp);
+		}
+		
+		if (buttonsdown & WPAD_BUTTON_2) 
+		{
+			if(ent[cline].type == DIRENT_T_FILE)
+			{
+				sprintf(tmp, "%s/%s", cpath, ent[cline].name);
+			} else
+			{
+				sprintf(tmp, "/%s", ent[cline].name);
+			}
+			resetscreen();
+			patch(tmp, ios);
+			sleep(5);
+			browser(cpath, ent, cline, lcnt);
+		}
+
+		if(buttonsdown & WPAD_BUTTON_HOME)
+		{
+			if (*(u32*)0x80001800) exit(0);
+			SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
 		}
 	
 	}		
