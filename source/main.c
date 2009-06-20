@@ -31,7 +31,7 @@
 
 #define NETWORK_HOSTNAME	"nicksasa.x10hosting.com"
 #define link                "/FileFlasher.dol"
-//The filename of the sd file thats gonna be writen
+//The filename of the sd file thats gonna be written
 
 
 //Types.
@@ -61,11 +61,35 @@ typedef struct _list
 /* Video pointers */
 static GXRModeObj *rmode = NULL;
 u32 *xfb;
+bool Power_Flag;
+bool Reset_Flag;
 
 // Prevent IOS36 loading at startup
 s32 __IOS_LoadStartupIOS()
 {
 	return 0;
+}
+
+static void power_cb () 
+{
+	Power_Flag = true;
+}
+
+static void reset_cb () 
+{
+	Reset_Flag = true;
+}
+
+void Verify_Flags()
+{
+	if (Power_Flag)
+	{
+		STM_ShutdownToStandby();
+	}
+	if (Reset_Flag)
+	{
+		STM_RebootSystem();
+	}
 }
 
 void Reboot()
@@ -79,6 +103,7 @@ s32 waitforbuttonpress()
 	s32 pressed;
 	while (true)
 	{
+		Verify_Flags();
 		WPAD_ScanPads();
 		pressed = WPAD_ButtonsDown(0);
 		if(pressed) 
@@ -189,8 +214,8 @@ void flash(char* source, char* destination)
 	ISFS_Close(a);
 	s32 b = ISFS_Open(destination, ISFS_OPEN_RW);
 	ret = ISFS_GetFileStats(b, stats);
-	printf("Written file to nand !\n");
-	printf("New nand file is now %u bytes\n", stats->file_length);
+	printf("Flashing file to nand successful!\n");
+	printf("New file is %u bytes\n", stats->file_length);
 	ISFS_Close(b);
 	fclose(file);
 	free(stats);
@@ -199,6 +224,18 @@ void flash(char* source, char* destination)
 
 void dumpfile(char source[1024], char destination[1024])
 {
+	// TODO Implement a way to abort the dumping to process without exiting the program
+	Verify_Flags();
+	int buttonsdown = 0;
+	WPAD_ScanPads();
+	buttonsdown = WPAD_ButtonsDown(0);
+	if (buttonsdown & WPAD_BUTTON_B) 
+	{
+		printf("Exiting...\n");
+		sleep(5);
+		Reboot();
+	}
+
 	u8 *buffer;
 	fstats *status;
 
@@ -637,16 +674,6 @@ bool dumpfolder(char source[1024], char destination[1024])
 {
 	printf("Entering folder: %s\n", source);
 	
-	int buttonsdown = 0;
-	WPAD_ScanPads();
-	buttonsdown = WPAD_ButtonsDown(0);
-	if (buttonsdown) 
-	{
-		printf("Exiting...\n");
-		sleep(5);
-		Reboot();
-	}
-
 	s32 tcnt;
 	int ret;
 	int i;
@@ -844,6 +871,11 @@ bool update_fstoolbox(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
+	Power_Flag = false;
+	Reset_Flag = false;
+	SYS_SetPowerCallback (power_cb);
+    SYS_SetResetCallback (reset_cb);
+
 	char path2[500];
 	char path3[500];
 	char tmp[ISFS_MAXPATH + 1];
@@ -1014,6 +1046,7 @@ int main(int argc, char **argv)
 	
 	while (1) 
 	{
+		Verify_Flags();
 		WPAD_ScanPads();
 	
 		int buttonsdown = WPAD_ButtonsDown(0);
