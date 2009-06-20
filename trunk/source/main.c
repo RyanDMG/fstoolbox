@@ -62,6 +62,18 @@ typedef struct _list
 static GXRModeObj *rmode = NULL;
 u32 *xfb;
 
+// Prevent IOS36 loading at startup
+s32 __IOS_LoadStartupIOS()
+{
+	return 0;
+}
+
+void Reboot()
+{
+	if (*(u32*)0x80001800) exit(0);
+	SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+}
+
 s32 waitforbuttonpress()
 {
 	s32 pressed;
@@ -133,7 +145,7 @@ void flash(char* source, char* destination)
 	{
 		printf("fopen error\n");
 		sleep(20);
-		exit(0);
+		Reboot();
 	}
 	fseek(file, 0, SEEK_END);
 	u32 filesize = ftell(file);
@@ -243,7 +255,7 @@ void dumpfile(char source[1024], char destination[1024])
 		{
 			printf("fwrite error%d\n", ret);
 			sleep(10);
-			exit(0);
+			Reboot();
 		}
 		restsize -= size;
 	}
@@ -309,14 +321,14 @@ u8 *get_ioslist(u32 *cnt)
 	if(res < 0)
 	{
 		printf("ES_GetNumTitles: Error! (result = %d)\n", res);
-		exit(0);
+		Reboot();
 	}
 	buf = memalign(32, sizeof(u64) * tcnt);
 	res = ES_GetTitles(buf, tcnt);
 	if(res < 0)
 	{
 		printf("ES_GetTitles: Error! (result = %d)\n", res);
-		exit(0);
+		Reboot();
 	}
 	//Ugly.
 	for(i = 0; i < tcnt; i++)
@@ -384,8 +396,9 @@ int ios_selection(int default_ios)
 }
 
 
-bool patch(char tmd[500], u32 ios)
+bool patch(char tmd[500])
 {
+	int ios;
 	s32 ret;
 	s32 nandfile;
 	nandfile = ISFS_Open(tmd, ISFS_OPEN_RW);
@@ -416,11 +429,10 @@ bool patch(char tmd[500], u32 ios)
 	}
 	ISFS_Close(nandfile);
 
-	int ios2;
 	resetscreen();
-	ios2 = ios_selection(36);
+	ios = ios_selection(36);
 	printf("\n\nThis channel is using IOS %d\n", buffer2[0x18B]);
-	printf("\nPress A to patch TMD to use IOS %d or B to exit\n", ios2);
+	printf("\nPress A to patch TMD to use IOS %d or B to exit\n", ios);
 
 	while (true)
 	{
@@ -434,16 +446,16 @@ bool patch(char tmd[500], u32 ios)
 		}
 		if (pressed == WPAD_BUTTON_B)
 		{
-			exit(0);
+			Reboot();
 		}
 	}
 						
-	printf("\nPatching TMD to use IOS %d\n", ios2);
+	printf("\nPatching TMD to use IOS %d\n", ios);
 
 	zero_sig((signed_blob *)buffer2);
 	brute_tmd(SIGNATURE_PAYLOAD((signed_blob *)buffer2));
 	//buffer[0x18B] = 0x24;
-	buffer2[0x18B] = ios2;
+	buffer2[0x18B] = ios;
 	ISFS_Delete(tmd);
 	ISFS_CreateFile(tmd, 0, 3, 3, 1);
 
@@ -461,7 +473,7 @@ bool patch(char tmd[500], u32 ios)
 		printf("isfs_write error %d\n", ret);
 	} else
 	{
-		printf("Patched succesfully to IOS %d!\n", ios2);
+		printf("Patched succesfully to IOS %d!\n", ios);
 	}
 	ISFS_Close(nandfile);
 	free(status);
@@ -617,6 +629,7 @@ void browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 			printf("going to the next file\n");
 			}*/
 	}
+	printf("\n");
 }
 
 
@@ -631,7 +644,7 @@ bool dumpfolder(char source[1024], char destination[1024])
 	{
 		printf("Exiting...\n");
 		sleep(5);
-		exit(0);
+		Reboot();
 	}
 
 	s32 tcnt;
@@ -658,7 +671,7 @@ bool dumpfolder(char source[1024], char destination[1024])
 		{
 			printf("Error making directory %d...\n", ret);
 			sleep(10);
-			exit(0);
+			Reboot();
 		}
 	}
 	
@@ -704,7 +717,13 @@ int ios_selectionmenu(int default_ios)
 	int i;
 	for (i=0;i<ioscount;i++)
 	{
+		// Default to default_ios if found, else the loaded IOS
 		if (list[i] == default_ios)
+		{
+			selection = i;
+			break;
+		}
+		if (list[i] == IOS_GetVersion())
 		{
 			selection = i;
 		}
@@ -713,9 +732,11 @@ int ios_selectionmenu(int default_ios)
 	while (true)
 	{
 		printf("\x1B[%d;%dH",0,0);	// move console cursor to x/y
+		printf("Currently using IOS%u (Rev %u)\n", IOS_GetVersion(), IOS_GetRevision());
 		printf("Select the IOS to load for FSToolbox : %3d", list[selection]);
 		printf("\nIf you want to acces savedata load IOS 249 or a cIOS\n");
 		printf("Otherwise IOS 36 is the best choice\n");
+		printf("Press B to continue without IOS Reload\n");
 		pressed = WPAD_ButtonsDown(0);
 		WPAD_ScanPads();
 		if (pressed == WPAD_BUTTON_LEFT)
@@ -739,6 +760,11 @@ int ios_selectionmenu(int default_ios)
 			}
 		}
 		if (pressed == WPAD_BUTTON_A) break;
+		if (pressed == WPAD_BUTTON_B)
+		{
+			return 0;
+		}
+		
 	}
 	return list[selection];
 }
@@ -768,7 +794,7 @@ bool update_fstoolbox(int argc, char **argv)
 	{
 		printf("Sorry, your launch path is empty\n");
 		sleep(10);
-		exit(0);
+		Reboot();
 	}
 
 	s32 ret;
@@ -786,7 +812,7 @@ bool update_fstoolbox(int argc, char **argv)
 	{
 		printf("INIT failed %d\n", ret);
 		sleep(5);
-		exit(0);
+		Reboot();
 	}
 	printf(" %s\n", network_getip());
 	printf("\n\n");
@@ -796,7 +822,7 @@ bool update_fstoolbox(int argc, char **argv)
 	{
 		printf("ERROR could not delete the old file, exitting ...\n");
 		sleep(10);
-		exit(0);
+		Reboot();
 	} else 
 	{
 		printf("Deleted old file\n");
@@ -839,16 +865,30 @@ int main(int argc, char **argv)
 	WPAD_SetDataFormat(WPAD_CHAN_0, WPAD_FMT_BTNS_ACC_IR);					
 
 	int ios;
-	ios = ios_selectionmenu(36);
+	ios = ios_selectionmenu(249);
 	WPAD_Shutdown();
-	IOS_ReloadIOS(ios);
+	if (ios != 0)
+	{
+		IOS_ReloadIOS(ios);
+	}
 	WPAD_Init();
 	WPAD_SetDataFormat(WPAD_CHAN_0, WPAD_FMT_BTNS_ACC_IR);					
 
 	sprintf(cpath, "/");
 //	strcpy(cpath, "/");
-	Identify_SU();
-	ISFS_Initialize();
+	if (Identify_SU() != 0)
+	{
+		printf("Identify as SU failed, press any button to continue\n");
+		waitforbuttonpress();
+	}
+	
+	ret = ISFS_Initialize();
+	if (ret < 0) 
+	{
+		printf("Error: ISFS_Initialize returned %d\n", ret);
+		sleep(5);
+		Reboot();
+	}
 
 	__io_wiisd.startup();
 	fatMount("sd",&__io_wiisd,0,4,512);
@@ -900,13 +940,14 @@ int main(int argc, char **argv)
 
 	resetscreen();
 
-	printf("FS Toolbox 0.3 by Nicksasa & Wiipower\n\n"); 
+	printf("FS Toolbox 0.3 by Nicksasa & WiiPower\n\n"); 
 
 	printf("ALL files will be stored in sd:/FSTOOLBOX !\n\n");
 	printf("Press - to dump file to SD\n");
 	printf("Press + to write file to nand\n");
 	printf("Press 1 to dump the dir you're currently in, including all sub dirs\n");
-	printf("Press 2 on a TMD to change the IOS it uses and fakesign it\n\n");
+	printf("Press 2 on a TMD to change the IOS it uses and fakesign it\n");
+	printf("Press Home to exit\n\n");
 
 	printf("Press A to continue\n");
 	if (argc == 0 || argv == NULL || *argv == NULL)
@@ -932,6 +973,10 @@ int main(int argc, char **argv)
 		{
 			update_fstoolbox(argc, argv);
 		}
+		if (buttonsdown & WPAD_BUTTON_HOME) 
+		{
+			Reboot();
+		}
 	}
 
 	ret = (u32)opendir("sd:/FSTOOLBOX");
@@ -943,7 +988,7 @@ int main(int argc, char **argv)
 		{
 			printf("Error making directory %d...\n", ret);
 			sleep(10);
-			exit(0);
+			Reboot();
 		}
 	}	  
 	
@@ -1041,7 +1086,7 @@ int main(int argc, char **argv)
 					{
 						printf("Error making directory %d...\n", ret);
 						sleep(10);
-						exit(0);
+						Reboot();
 					}
 				}
 			}
@@ -1097,15 +1142,14 @@ int main(int argc, char **argv)
 				sprintf(tmp, "/%s", ent[cline].name);
 			}
 			resetscreen();
-			patch(tmp, ios);
+			patch(tmp);
 			sleep(5);
 			browser(cpath, ent, cline, lcnt);
 		}
 
 		if(buttonsdown & WPAD_BUTTON_HOME)
 		{
-			if (*(u32*)0x80001800) exit(0);
-			SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+			Reboot();
 		}
 	
 	}		
