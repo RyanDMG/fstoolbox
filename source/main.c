@@ -42,6 +42,7 @@ typedef struct _dirent
 	int type;
 	u32 ownerID;
 	u16 groupID;
+	u8 attributes;
 	u8 ownerperm;
 	u8 groupperm;
 	u8 otherperm;
@@ -433,12 +434,12 @@ int ios_selection(int default_ios)
 }
 
 
-bool patch(char tmd[500])
+bool patch(char tmdpath[500])
 {
 	int ios;
 	s32 ret;
 	s32 nandfile;
-	nandfile = ISFS_Open(tmd, ISFS_OPEN_RW);
+	nandfile = ISFS_Open(tmdpath, ISFS_OPEN_RW);
 	if (nandfile < 0) 
 	{
 		printf("Error: ISFS_OpenFile returned %d\n", nandfile);
@@ -493,10 +494,10 @@ bool patch(char tmd[500])
 	brute_tmd(SIGNATURE_PAYLOAD((signed_blob *)buffer2));
 	//buffer[0x18B] = 0x24;
 	buffer2[0x18B] = ios;
-	ISFS_Delete(tmd);
-	ISFS_CreateFile(tmd, 0, 3, 3, 1);
+	ISFS_Delete(tmdpath);
+	ISFS_CreateFile(tmdpath, 0, 3, 3, 1);
 
-	nandfile = ISFS_Open(tmd, ISFS_OPEN_RW);
+	nandfile = ISFS_Open(tmdpath, ISFS_OPEN_RW);
 	if (nandfile < 0) 
 	{
 		printf("Error: ISFS_OpenFile returned %d\n", nandfile);
@@ -603,6 +604,13 @@ void getdir(char *path, dirent_t **ent, int *cnt)
 	}
 	*ent = malloc(sizeof(dirent_t) * num);
 
+	u32 ownerID = 0;
+	u16 groupID = 0;
+	u8 attributes = 0;
+	u8 ownerperm = 0;
+	u8 groupperm = 0;
+	u8 otherperm = 0;
+
 	//Split up the name list.
 	for(i = 0, k = 0; i < num; i++)
 	{
@@ -621,14 +629,30 @@ void getdir(char *path, dirent_t **ent, int *cnt)
 			sprintf(pbuf, "/%s", ebuf);
 		//Dir or file?
 		(*ent)[i].type = ((isdir(pbuf) == 1) ? DIRENT_T_DIR : DIRENT_T_FILE);
-		
+
+		res = ISFS_GetAttr(pbuf, &ownerID, &groupID, &attributes, &ownerperm, &groupperm, &otherperm);
+		if(res != ISFS_OK)
+		{
+			ownerID = 0;
+			groupID = 0;
+			attributes = 0;
+			ownerperm = 0;
+			groupperm = 0;
+			otherperm = 0;
+		}
+		(*ent)[i].ownerID = ownerID;
+		(*ent)[i].groupID = groupID;
+		(*ent)[i].attributes = attributes;
+		(*ent)[i].ownerperm = ownerperm;
+		(*ent)[i].groupperm = groupperm;
+		(*ent)[i].otherperm = otherperm;
 	}
 	qsort(*ent, *cnt, sizeof(dirent_t), __FileCmp);
 	
 	free(nbuf);
 }
 
-		
+
 void browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 {
 	int i;
@@ -637,34 +661,15 @@ void browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 	printf("Press 1 to dump the dir you're currently in, including all sub dirs\n");
 	printf("press 2 to patch ios version in a TMD and fakesign it\n\n");
 	printf("Path: %s\n\n", cpath);
-	printf("  NAME          TYPE    \n");
+	printf("  NAME          TYPE     OID     GID     ATTR   OP   GP   OTP\n");
 		
 	for(i = (cline / 15)*15; i < lcnt && i < (cline / 15)*15+15; i++) 
 	{
-		printf("%s %-12s  %s\n", 
+		printf("%s %-12s  %s   %6u  %6u   %3u    %u    %u    %u\n", 
 				(i == cline ? ">" : " "),
 				ent[i].name,
-				(ent[i].type == DIRENT_T_DIR ? "[DIR] " : "[FILE]")				
+				(ent[i].type == DIRENT_T_DIR ? "[DIR] " : "[FILE]"), ent[i].ownerID, ent[i].groupID, ent[i].attributes, ent[i].ownerperm, ent[i].groupperm, ent[i].otherperm				
 			);
-		
-				
-			/*if(cline > (i + 15)) {
-			i = cline;
-			};*/
-			/*printf("%s %-12s  %s\n",
-				(i == cline ? ">" : " "), ent[i].name, (ent[i].type == DIRENT_T_DIR ? "[DIR] " : "[FILE]"));
-			
-			
-			if(ent[i].type == DIRENT_T_FILE) {
-			printf("cpath : %s\n", cpath);
-			sprintf(lol, "%s/%s", cpath, ent[i].name);
-			sprintf(lol2, "sd:/FSTOOLBOX%s/%s", cpath, ent[i].name);
-			printf("lol : %s\n", lol);
-			printf("sd path : %s\n", lol2);
-			sleep(5);
-			dumpfile(lol, lol2);
-			printf("going to the next file\n");
-			}*/
 	}
 	printf("\n");
 }
