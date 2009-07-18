@@ -85,6 +85,7 @@ void Verify_Flags()
 {
 	if (Power_Flag)
 	{
+		WPAD_Shutdown();
 		STM_ShutdownToStandby();
 	}
 	if (Reset_Flag)
@@ -99,19 +100,52 @@ void Reboot()
 	SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
 }
 
-s32 waitforbuttonpress()
+void waitforbuttonpress(u32 *out, u32 *outGC)
 {
-	s32 pressed;
+	u32 pressed = 0;
+	u32 pressedGC = 0;
+
 	while (true)
 	{
-		Verify_Flags();
 		WPAD_ScanPads();
 		pressed = WPAD_ButtonsDown(0);
-		if(pressed) 
+
+		PAD_ScanPads();
+		pressedGC = PAD_ButtonsDown(0);
+
+		if(pressed || pressedGC) 
 		{
-			return pressed;
+			if (pressedGC)
+			{
+				// Without waiting you can't select anything
+				usleep (20000);
+			}
+			if (out) *out = pressed;
+			if (outGC) *outGC = pressedGC;
+			return;
 		}
 	}
+}
+
+void Con_ClearLine()
+{
+	s32 cols, rows;
+	u32 cnt;
+
+	printf("\r");
+	fflush(stdout);
+
+	/* Get console metrics */
+	CON_GetMetrics(&cols, &rows);
+
+	/* Erase line */
+	for (cnt = 1; cnt < cols; cnt++) {
+		printf(" ");
+		fflush(stdout);
+	}
+
+	printf("\r");
+	fflush(stdout);
 }
 
 static void sys_init(void)
@@ -223,18 +257,21 @@ void flash(char* source, char* destination)
 	free(buffer3);
 }
 
-void dumpfile(char source[1024], char destination[1024])
+s32 dumpfile(char source[1024], char destination[1024])
 {
-	// TODO Implement a way to abort the dumping to process without exiting the program
 	Verify_Flags();
 	int buttonsdown = 0;
+	int buttonsdownGC = 0;
+	
 	WPAD_ScanPads();
 	buttonsdown = WPAD_ButtonsDown(0);
-	if (buttonsdown & WPAD_BUTTON_B) 
+	PAD_ScanPads();
+	buttonsdownGC = PAD_ButtonsDown(0);
+
+	if ((buttonsdown & WPAD_BUTTON_B) || (buttonsdownGC & PAD_BUTTON_B)) 
 	{
-		printf("Exiting...\n");
-		sleep(5);
-		Reboot();
+		printf("\nB button pressed...\n");
+		return -1;
 	}
 
 	u8 *buffer;
@@ -248,26 +285,30 @@ void dumpfile(char source[1024], char destination[1024])
 	fd = ISFS_Open(source, ISFS_OPEN_READ);
 	if (fd < 0) 
 	{
-		printf("Error: ISFS_OpenFile(%s) returned %d\n", source, fd);
-		return;
+		printf("\nError: ISFS_OpenFile(%s) returned %d\n", source, fd);
+		return fd;
 	}
 	
 	file = fopen(destination, "wb");
 	if (!file)
 	{
-		printf("Error: fopen(%s) returned 0\n", destination);
-		sleep(20);
+		printf("\nError: fopen(%s) returned 0\n", destination);
+		ISFS_Close(fd);
+		return -1;
 	}
 
 	status = memalign(32, sizeof(fstats) );
 	ret = ISFS_GetFileStats(fd, status);
 	if (ret < 0)
 	{
-		printf("ISFS_GetFileStats(fd) returned %d\n", ret);
+		printf("\nISFS_GetFileStats(fd) returned %d\n", ret);
+		ISFS_Close(fd);
+		fclose(file);
 		free(status);
-		return;
+		return ret;
 	}
-	printf("File: %s, filesize: %uKB\nDumping...", source, (status->file_length / 1024)+1);
+	Con_ClearLine();
+	printf("Dumping file %s, size = %uKB ...", source, (status->file_length / 1024)+1);
 
 	buffer = (u8 *)memalign(32, BLOCKSIZE);
 	u32 restsize = status->file_length;
@@ -283,17 +324,22 @@ void dumpfile(char source[1024], char destination[1024])
 		ret = ISFS_Read(fd, buffer, size);
 		if (ret < 0)
 		{
-			printf("ISFS_Read(%d, %p, %d) returned %d\n", fd, buffer, size, ret);
+			printf("\nISFS_Read(%d, %p, %d) returned %d\n", fd, buffer, size, ret);
+			ISFS_Close(fd);
+			fclose(file);
 			free(status);
 			free(buffer);
-			return;
+			return ret;
 		}
 		ret = fwrite(buffer, 1, size, file);
 		if(ret < 0) 
 		{
-			printf("fwrite error%d\n", ret);
-			sleep(10);
-			Reboot();
+			printf("\nfwrite error%d\n", ret);
+			ISFS_Close(fd);
+			fclose(file);
+			free(status);
+			free(buffer);
+			return ret;
 		}
 		restsize -= size;
 	}
@@ -301,7 +347,7 @@ void dumpfile(char source[1024], char destination[1024])
 	fclose(file);
 	free(status);
 	free(buffer);
-	printf("complete\n");
+	return 0;
 }
 
 void zero_sig(signed_blob *sig) 
@@ -388,6 +434,7 @@ u8 *get_ioslist(u32 *cnt)
 int ios_selection(int default_ios)
 {
 	s32 pressed;
+	s32 pressedGC;
 	int selection = 0;
 	u32 ioscount;
 	u8 *list = get_ioslist(&ioscount);
@@ -406,9 +453,18 @@ int ios_selection(int default_ios)
 		printf("\x1B[%d;%dH",0,0);	// move console cursor to x/y
 		printf("Select the IOS you want your channel to use: %3d", list[selection]);
 		printf("\nThis will not patch it right away so you can cancel it\n");
-		pressed = WPAD_ButtonsDown(0);
 		WPAD_ScanPads();
-		if (pressed == WPAD_BUTTON_LEFT)
+		pressed = WPAD_ButtonsDown(0);
+
+		PAD_ScanPads();
+		pressedGC = PAD_ButtonsDown(0);
+		if (pressedGC)
+		{
+			// Without waiting you can't select anything
+			usleep (20000);
+		}
+
+		if (pressed == WPAD_BUTTON_LEFT || pressedGC == PAD_BUTTON_LEFT)
 		{	
 			if (selection > 0)
 			{
@@ -418,7 +474,7 @@ int ios_selection(int default_ios)
 				selection = ioscount - 1;
 			}
 		}
-		if (pressed == WPAD_BUTTON_RIGHT)
+		if (pressed == WPAD_BUTTON_RIGHT || pressedGC == PAD_BUTTON_RIGHT)
 		{
 			if (selection < ioscount -1	)
 			{
@@ -428,7 +484,7 @@ int ios_selection(int default_ios)
 				selection = 0;
 			}
 		}
-		if (pressed == WPAD_BUTTON_A) break;
+		if (pressed == WPAD_BUTTON_A || pressedGC == PAD_BUTTON_A) break;
 	}
 	return list[selection];
 }
@@ -472,17 +528,21 @@ bool patch(char tmdpath[500])
 	printf("\n\nThis channel is using IOS %d\n", buffer2[0x18B]);
 	printf("\nPress A to patch TMD to use IOS %d or B to exit\n", ios);
 
+	s32 pressed;
+	s32 pressedGC;
+
 	while (true)
 	{
-		s32 pressed;
-		pressed = WPAD_ButtonsDown(0);
 		WPAD_ScanPads();
+		pressed = WPAD_ButtonsDown(0);
+		PAD_ScanPads();
+		pressedGC = PAD_ButtonsDown(0);
 			
-		if (pressed == WPAD_BUTTON_A)
+		if (pressed == WPAD_BUTTON_A || pressedGC == PAD_BUTTON_A)
 		{
 			break;
 		}
-		if (pressed == WPAD_BUTTON_B)
+		if (pressed == WPAD_BUTTON_B || pressedGC == PAD_BUTTON_B)
 		{
 			Reboot();
 		}
@@ -657,9 +717,9 @@ void browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 {
 	int i;
 	resetscreen();
-	printf("Press - to dump file to SD, press + to write file from SD to NAND\n");
-	printf("Press 1 to dump the dir you're currently in, including all sub dirs\n");
-	printf("press 2 to patch ios version in a TMD and fakesign it\n\n");
+	printf("Press -/L to dump file to SD, press +/R to write file from SD to NAND\n");
+	printf("Press 1/Z to dump the dir you're currently in, including all sub dirs\n");
+	printf("press 2/X to patch ios version in a TMD and fakesign it\n\n");
 	printf("Path: %s\n\n", cpath);
 	printf("  NAME          TYPE     OID     GID     ATTR   OP   GP   OTP\n");
 		
@@ -677,15 +737,18 @@ void browser(char cpath[ISFS_MAXPATH + 1], dirent_t* ent, int cline, int lcnt)
 
 bool dumpfolder(char source[1024], char destination[1024])
 {
-	printf("Entering folder: %s\n", source);
+	//printf("Entering folder: %s\n", source);
 	
 	s32 tcnt;
 	int ret;
 	int i;
 	char path[1024];
 	char path2[1024];
-	dirent_t *test = NULL;
-	getdir(source, &test, &tcnt);
+	dirent_t *dir = NULL;
+	u32 pressed;
+	u32 pressedGC;
+
+	getdir(source, &dir, &tcnt);
 
 	if (strlen(source) == 1)
 	{
@@ -702,8 +765,8 @@ bool dumpfolder(char source[1024], char destination[1024])
 		if (ret < 0)
 		{
 			printf("Error making directory %d...\n", ret);
-			sleep(10);
-			Reboot();
+			free(dir);
+			return false;
 		}
 	}
 	
@@ -711,13 +774,13 @@ bool dumpfolder(char source[1024], char destination[1024])
 	{				
 		if (strlen(source) == 1)
 		{
-			sprintf(path, "%s%s", source, test[i].name);
+			sprintf(path, "%s%s", source, dir[i].name);
 		} else
 		{
-			sprintf(path, "%s/%s", source, test[i].name);
+			sprintf(path, "%s/%s", source, dir[i].name);
 		}
 		
-		if(test[i].type == DIRENT_T_FILE) 
+		if(dir[i].type == DIRENT_T_FILE) 
 		{
 			sprintf(path2, "%s%s", destination, path);
 
@@ -725,23 +788,40 @@ bool dumpfolder(char source[1024], char destination[1024])
 			//printf("To: %s\n", path2);
 
 			//sleep(5);
-			dumpfile(path, path2);
+			ret = dumpfile(path, path2);
+			if (ret < 0)
+			{
+				sleep(1);
+				printf("Do you want to continue anyway?\n");
+				waitforbuttonpress(&pressed, &pressedGC);
+				
+				if (!((pressed & WPAD_BUTTON_A) || (pressedGC & PAD_BUTTON_A)))
+				{
+					free(dir);
+					return false;
+				}
+			}
 		} else
 		{
-			if(test[i].type == DIRENT_T_DIR) 
+			if(dir[i].type == DIRENT_T_DIR) 
 			{
-				dumpfolder(path, destination);
+				if (!dumpfolder(path, destination))
+				{
+					free(dir);
+					return false;
+				}
 			}	
 		}
 	}
-	free(test);
-	printf("Dumping folder %s complete\n\n", source);
+	free(dir);
+	//printf("Dumping folder %s complete\n\n", source);
 	return true;
 }	
 
 int ios_selectionmenu(int default_ios)
 {
 	s32 pressed;
+	s32 pressedGC;
 	int selection = 0;
 	u32 ioscount;
 	u8 *list = get_ioslist(&ioscount);
@@ -769,9 +849,18 @@ int ios_selectionmenu(int default_ios)
 		printf("\nIf you want to acces savedata load IOS 249 or a cIOS\n");
 		printf("Otherwise IOS 36 is the best choice\n");
 		printf("Press B to continue without IOS Reload\n");
-		pressed = WPAD_ButtonsDown(0);
+	
 		WPAD_ScanPads();
-		if (pressed == WPAD_BUTTON_LEFT)
+		pressed = WPAD_ButtonsDown(0);
+		PAD_ScanPads();
+		pressedGC = PAD_ButtonsDown(0);
+		if (pressedGC)
+		{
+			// Without waiting you can't select anything
+			usleep (20000);
+		}
+
+		if (pressed == WPAD_BUTTON_LEFT || pressedGC == PAD_BUTTON_LEFT)
 		{	
 			if (selection > 0)
 			{
@@ -781,7 +870,7 @@ int ios_selectionmenu(int default_ios)
 				selection = ioscount - 1;
 			}
 		}
-		if (pressed == WPAD_BUTTON_RIGHT)
+		if (pressed == WPAD_BUTTON_RIGHT || pressedGC == PAD_BUTTON_RIGHT)
 		{
 			if (selection < ioscount -1	)
 			{
@@ -791,8 +880,8 @@ int ios_selectionmenu(int default_ios)
 				selection = 0;
 			}
 		}
-		if (pressed == WPAD_BUTTON_A) break;
-		if (pressed == WPAD_BUTTON_B)
+		if (pressed == WPAD_BUTTON_A || pressedGC == PAD_BUTTON_A) break;
+		if (pressed == WPAD_BUTTON_B || pressedGC == PAD_BUTTON_B)
 		{
 			return 0;
 		}
@@ -894,29 +983,28 @@ int main(int argc, char **argv)
 	s32 cline = 0;
 
 	sys_init();
-	// char *dat;
-	// config("sd:/test.txt", &dat);
-	// printf("%s", dat);
-	// sleep(10);
+
+	PAD_Init();
 	WPAD_Init();
 	WPAD_SetDataFormat(WPAD_CHAN_0, WPAD_FMT_BTNS_ACC_IR);					
 
 	int ios;
 	ios = ios_selectionmenu(249);
-	WPAD_Shutdown();
 	if (ios != 0)
 	{
+		WPAD_Shutdown();
 		IOS_ReloadIOS(ios);
+		PAD_Init();
+		WPAD_Init();
+		WPAD_SetDataFormat(WPAD_CHAN_0, WPAD_FMT_BTNS_ACC_IR);					
 	}
-	WPAD_Init();
-	WPAD_SetDataFormat(WPAD_CHAN_0, WPAD_FMT_BTNS_ACC_IR);					
 
 	sprintf(cpath, "/");
-//	strcpy(cpath, "/");
+
 	if (Identify_SU() != 0)
 	{
 		printf("Identify as SU failed, press any button to continue\n");
-		waitforbuttonpress();
+		waitforbuttonpress(NULL, NULL);
 	}
 	
 	ret = ISFS_Initialize();
@@ -929,62 +1017,17 @@ int main(int argc, char **argv)
 
 	__io_wiisd.startup();
 	fatMount("sd",&__io_wiisd,0,4,512);
-	//Background_Show();
-	/* FILE *fp;
-	mxml_node_t *tree;
-
-	fp = fopen("sd:/flash.xml", "r");
-	tree = mxmlLoadFile(NULL, fp, MXML_TEXT_CALLBACK);
-	fclose(fp);
-
-	mxml_node_t *branch = mxmlFindElement(tree, tree, "filepath", NULL, NULL, MXML_DESCEND);
-	mxml_node_t *node = mxmlFindElement(branch, branch, "src", NULL, NULL, MXML_DESCEND);
-		
-		 
-
-
-	//Name's
-	mxml_node_t *branchname = mxmlFindElement(tree, tree, "destinationpath", NULL, NULL, MXML_DESCEND);
-		
-	mxml_node_t *nodedst = mxmlFindElement(branchname, branchname, "dst", NULL, NULL, MXML_DESCEND);
-		 
-
-
-	char source[256];
-
-
-	char destination[256];
-		
-			
-	get_value(node, source, 256);	
-	get_value(nodedst, destination, 256);
-			
-
-
-	printf("\n");
-	//printf("File :'%s' copy to %s\n\n", source, destination);
-
-
-
-	// printf("Channel 2 :'%s' with title ID %s\n", name2, titleid2);
-	// printf("Channel 3 :'%s' with title ID %s\n", name3, titleid3);
-	//sscanf(titleid, "%s", id);
-	*/
-	//ASND_Init();	
-	//MP3Player_Init();
-
-	//if (!MP3Player_IsPlaying()) MP3Player_PlayBuffer(background, background_size, NULL);
 
 	resetscreen();
 
 	printf("FS Toolbox 0.3 by Nicksasa & WiiPower\n\n"); 
 
 	printf("ALL files will be stored in sd:/FSTOOLBOX !\n\n");
-	printf("Press - to dump file to SD\n");
-	printf("Press + to write file to nand\n");
-	printf("Press 1 to dump the dir you're currently in, including all sub dirs\n");
-	printf("Press 2 on a TMD to change the IOS it uses and fakesign it\n");
-	printf("Press Home to exit\n\n");
+	printf("Press -/L to dump file to SD\n");
+	printf("Press +/R to write file to nand\n");
+	printf("Press 1/Z to dump the dir you're currently in, including all sub dirs\n");
+	printf("Press 2/X on a TMD to change the IOS it uses and fakesign it\n");
+	printf("Press Home/Start to exit\n\n");
 
 	printf("Press A to continue\n");
 	if (argc == 0 || argv == NULL || *argv == NULL)
@@ -993,24 +1036,27 @@ int main(int argc, char **argv)
 
 	} else
 	{
-		printf("Press 1 to UPDATE FS Toolbox to the latest version!\n");
+		printf("Press 1/Z to UPDATE FS Toolbox to the latest version!\n");
 		printf("The update would be downloaded to: %s\n\n", *argv);
 	}
 
 	while (1) 
 	{
 		WPAD_ScanPads();
-		
 		int buttonsdown = WPAD_ButtonsDown(0);
-		if (buttonsdown & WPAD_BUTTON_A) 
+
+		PAD_ScanPads();
+		int buttonsdownGC = PAD_ButtonsDown(0);
+
+		if ((buttonsdown & WPAD_BUTTON_A) || (buttonsdownGC & PAD_BUTTON_A)) 
 		{
 			break;
 		}
-		if (buttonsdown & WPAD_BUTTON_1) 
+		if ((buttonsdown & WPAD_BUTTON_1) || (buttonsdownGC & PAD_TRIGGER_Z))
 		{
 			update_fstoolbox(argc, argv);
 		}
-		if (buttonsdown & WPAD_BUTTON_HOME) 
+		if ((buttonsdown & WPAD_BUTTON_HOME) || (buttonsdownGC & PAD_BUTTON_START)) 
 		{
 			Reboot();
 		}
@@ -1053,11 +1099,18 @@ int main(int argc, char **argv)
 	{
 		Verify_Flags();
 		WPAD_ScanPads();
-	
 		int buttonsdown = WPAD_ButtonsDown(0);
+		PAD_ScanPads();
+		int buttonsdownGC = PAD_ButtonsDown(0);
+
+		if (buttonsdownGC)
+		{
+			// Without waiting you can't select anything
+			usleep (20000);
+		}
 
 		//Navigate up.
-		if(buttonsdown & WPAD_BUTTON_UP)
+		if ((buttonsdown & WPAD_BUTTON_UP) || (buttonsdownGC & PAD_BUTTON_UP))
 		{			
 			if(cline > 0) 
 			{
@@ -1070,7 +1123,7 @@ int main(int argc, char **argv)
 		}
 
 		//Navigate down.
-		if(buttonsdown & WPAD_BUTTON_DOWN)
+		if ((buttonsdown & WPAD_BUTTON_DOWN) || (buttonsdownGC & PAD_BUTTON_DOWN))
 		{
 			if(cline < (lcnt - 1))
 			{
@@ -1083,7 +1136,7 @@ int main(int argc, char **argv)
 		}
 
 		//Enter parent dir.
-		if(buttonsdown & WPAD_BUTTON_B)
+		if ((buttonsdown & WPAD_BUTTON_B) || (buttonsdownGC & PAD_BUTTON_B))
 		{
 			int len = strlen(cpath);
 			for(i = len; cpath[i] != '/'; i--);
@@ -1098,7 +1151,7 @@ int main(int argc, char **argv)
 		}
 
 		//Enter dir.
-		if(buttonsdown & WPAD_BUTTON_A)
+		if ((buttonsdown & WPAD_BUTTON_A) || (buttonsdownGC & PAD_BUTTON_A))
 		{
 			//Is the current entry a dir?
 			if(ent[cline].type == DIRENT_T_DIR)
@@ -1132,16 +1185,18 @@ int main(int argc, char **argv)
 		}
 		
 		//Dump folder
-		if(buttonsdown & WPAD_BUTTON_1)
+		if ((buttonsdown & WPAD_BUTTON_1) || (buttonsdownGC & PAD_TRIGGER_Z))
 		{
-			dumpfolder(cpath, "sd:/FSTOOLBOX");
-			printf("Dumping complete. Press any button to continue...\n");
-			waitforbuttonpress();
+			if (dumpfolder(cpath, "sd:/FSTOOLBOX"))
+			{
+				printf("\nDumping complete. Press any button to continue...\n");
+			}			
+			waitforbuttonpress(NULL, NULL);
 			browser(cpath, ent, cline, lcnt);
 		}
 
 		//Dump file
-		if (buttonsdown & WPAD_BUTTON_MINUS) 
+		if ((buttonsdown & WPAD_BUTTON_MINUS) || (buttonsdownGC & PAD_TRIGGER_L)) 
 		{
 			if(ent[cline].type == DIRENT_T_FILE)
 			{
@@ -1152,11 +1207,15 @@ int main(int argc, char **argv)
 				sprintf(tmp, "/%s", ent[cline].name);
 				sprintf(path2, "sd:/FSTOOLBOX%s/%s", cpath, ent[cline].name);
 			}
-			dumpfile(tmp, path2);
+			ret = dumpfile(tmp, path2);
+			if (ret >= 0)
+			{
+				printf("\nDumping complete\n");
+			}
 		}
 		
 		//Flash file
-		if (buttonsdown & WPAD_BUTTON_PLUS) 
+		if ((buttonsdown & WPAD_BUTTON_PLUS) || (buttonsdownGC & PAD_TRIGGER_R)) 
 		{
 			if(ent[cline].type == DIRENT_T_FILE)
 			{
@@ -1170,7 +1229,7 @@ int main(int argc, char **argv)
 			flash(path2, tmp);
 		}
 		
-		if (buttonsdown & WPAD_BUTTON_2) 
+		if ((buttonsdown & WPAD_BUTTON_2) || (buttonsdownGC & PAD_BUTTON_X))
 		{
 			if(ent[cline].type == DIRENT_T_FILE)
 			{
@@ -1185,7 +1244,7 @@ int main(int argc, char **argv)
 			browser(cpath, ent, cline, lcnt);
 		}
 
-		if(buttonsdown & WPAD_BUTTON_HOME)
+		if ((buttonsdown & WPAD_BUTTON_HOME) || (buttonsdownGC & PAD_BUTTON_START))
 		{
 			Reboot();
 		}
