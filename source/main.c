@@ -260,8 +260,8 @@ void flash(char* source, char* destination)
 s32 dumpfile(char source[1024], char destination[1024])
 {
 	Verify_Flags();
-	int buttonsdown = 0;
-	int buttonsdownGC = 0;
+	u32 buttonsdown = 0;
+	u32 buttonsdownGC = 0;
 	
 	WPAD_ScanPads();
 	buttonsdown = WPAD_ButtonsDown(0);
@@ -433,8 +433,8 @@ u8 *get_ioslist(u32 *cnt)
 
 int ios_selection(int default_ios)
 {
-	s32 pressed;
-	s32 pressedGC;
+	u32 pressed;
+	u32 pressedGC;
 	int selection = 0;
 	u32 ioscount;
 	u8 *list = get_ioslist(&ioscount);
@@ -528,8 +528,8 @@ bool patch(char tmdpath[500])
 	printf("\n\nThis channel is using IOS %d\n", buffer2[0x18B]);
 	printf("\nPress A to patch TMD to use IOS %d or B to exit\n", ios);
 
-	s32 pressed;
-	s32 pressedGC;
+	u32 pressed;
+	u32 pressedGC;
 
 	while (true)
 	{
@@ -820,8 +820,8 @@ bool dumpfolder(char source[1024], char destination[1024])
 
 int ios_selectionmenu(int default_ios)
 {
-	s32 pressed;
-	s32 pressedGC;
+	u32 pressed;
+	u32 pressedGC;
 	int selection = 0;
 	u32 ioscount;
 	u8 *list = get_ioslist(&ioscount);
@@ -1043,10 +1043,10 @@ int main(int argc, char **argv)
 	while (1) 
 	{
 		WPAD_ScanPads();
-		int buttonsdown = WPAD_ButtonsDown(0);
+		u32 buttonsdown = WPAD_ButtonsDown(0);
 
 		PAD_ScanPads();
-		int buttonsdownGC = PAD_ButtonsDown(0);
+		u32 buttonsdownGC = PAD_ButtonsDown(0);
 
 		if ((buttonsdown & WPAD_BUTTON_A) || (buttonsdownGC & PAD_BUTTON_A)) 
 		{
@@ -1099,9 +1099,9 @@ int main(int argc, char **argv)
 	{
 		Verify_Flags();
 		WPAD_ScanPads();
-		int buttonsdown = WPAD_ButtonsDown(0);
+		u32 buttonsdown = WPAD_ButtonsDown(0);
 		PAD_ScanPads();
-		int buttonsdownGC = PAD_ButtonsDown(0);
+		u32 buttonsdownGC = PAD_ButtonsDown(0);
 
 		if (buttonsdownGC)
 		{
@@ -1187,11 +1187,28 @@ int main(int argc, char **argv)
 		//Dump folder
 		if ((buttonsdown & WPAD_BUTTON_1) || (buttonsdownGC & PAD_TRIGGER_Z))
 		{
-			if (dumpfolder(cpath, "sd:/FSTOOLBOX"))
+			u32 usage1;
+			u32 usage2;
+			ret = ISFS_GetUsage(cpath, &usage1, &usage2);
+			if (ret < 0)
 			{
-				printf("\nDumping complete. Press any button to continue...\n");
-			}			
-			waitforbuttonpress(NULL, NULL);
+				printf("Couldn't get nand usage\n");
+				sleep(10);
+				Reboot();
+			}
+			
+			printf("Press A to dump %u MB from: '%s'\n", (usage1 / 64)+1, cpath);
+			waitforbuttonpress(&buttonsdown, &buttonsdownGC);
+			if ((buttonsdown & WPAD_BUTTON_A) || (buttonsdownGC & PAD_BUTTON_A))
+				{
+				
+				
+				if (dumpfolder(cpath, "sd:/FSTOOLBOX"))
+				{
+					printf("\nDumping complete. Press any button to continue...\n");
+				}			
+				waitforbuttonpress(NULL, NULL);
+			}
 			browser(cpath, ent, cline, lcnt);
 		}
 
