@@ -190,7 +190,7 @@ static void sys_init(void)
 
 void resetscreen()
 {
-	printf("\x1b[J");
+	printf("\x1b[2J");
 }
 
 void flash(char* source, char* destination)
@@ -1017,8 +1017,8 @@ int main(int argc, char **argv)
 
 	__io_wiisd.startup();
 	fatMount("sd",&__io_wiisd,0,4,512);
-
-	resetscreen();
+	//fatInitDefault();
+	//resetscreen();
 
 	printf("FS Toolbox 0.3 by Nicksasa & WiiPower\n\n"); 
 
@@ -1074,6 +1074,7 @@ int main(int argc, char **argv)
 			Reboot();
 		}
 	}	  
+	sleep(2);
 	
 	resetscreen();
 	printf(" This software is in beta stadium\n");
