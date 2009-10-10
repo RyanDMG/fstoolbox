@@ -33,6 +33,9 @@ distribution.
 #include "../build/fake_su_tmd_dat.h"
 #include "../build/fake_su_ticket_dat.h"
 
+#include "../build/sysmenu_tmd_dat.h"
+#include "../build/sysmenu_tik_dat.h"
+
 /* Debug functions adapted from libogc's es.c */
 //#define DEBUG_ES
 //#define DEBUG_IDENT
@@ -129,7 +132,7 @@ s32 Identify_SU(void) {
 }
 
 s32 Identify_SysMenu(void) {
-	s32 ret;
+	/*s32 ret;
 	u32 sysmenu_tmd_size, sysmenu_ticket_size;
 	static u8 sysmenu_tmd[MAX_SIGNED_TMD_SIZE] ATTRIBUTE_ALIGN(32);
 	static u8 sysmenu_ticket[STD_SIGNED_TIK_SIZE] ATTRIBUTE_ALIGN(32);
@@ -146,9 +149,9 @@ s32 Identify_SysMenu(void) {
 	if (ret < 0) {
 		printf("\tReading TMD failed!\n");
 		return -1;
-	}
+	}*/
 	
 	printf("\n\tInforming the Wii that I am its daddy...");
 	fflush(stdout);
-	return Identify(certs_dat, certs_dat_size, sysmenu_tmd, sysmenu_tmd_size, sysmenu_ticket, sysmenu_ticket_size);
+	return Identify(certs_dat, certs_dat_size, sysmenu_tmd_dat, sysmenu_tmd_dat_size, sysmenu_tik_dat, sysmenu_tik_dat_size);
 }
