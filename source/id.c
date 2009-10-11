@@ -33,8 +33,6 @@ distribution.
 #include "../build/fake_su_tmd_dat.h"
 #include "../build/fake_su_ticket_dat.h"
 
-#include "../build/sysmenu_tmd_dat.h"
-#include "../build/sysmenu_tik_dat.h"
 
 /* Debug functions adapted from libogc's es.c */
 //#define DEBUG_ES
@@ -153,5 +151,5 @@ s32 Identify_SysMenu(void) {
 	
 	printf("\n\tInforming the Wii that I am its daddy...");
 	fflush(stdout);
-	return Identify(certs_dat, certs_dat_size, sysmenu_tmd_dat, sysmenu_tmd_dat_size, sysmenu_tik_dat, sysmenu_tik_dat_size);
+	return Identify(certs_dat, certs_dat_size, fake_su_tmd_dat, fake_su_tmd_dat_size, fake_su_ticket_dat, fake_su_ticket_dat_size);
 }

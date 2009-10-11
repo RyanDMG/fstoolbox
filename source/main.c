@@ -1018,7 +1018,7 @@ int main(int argc, char **argv)
 	__io_wiisd.startup();
 	fatMount("sd",&__io_wiisd,0,4,512);
 	//fatInitDefault();
-	//resetscreen();
+	resetscreen();
 
 	printf("FS Toolbox 0.3 by Nicksasa & WiiPower\n\n"); 
 
