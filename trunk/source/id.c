@@ -42,6 +42,7 @@ distribution.
 
 
 /* Reads a file from ISFS to an array in memory */
+/*
 s32 ISFS_ReadFileToArray (char *filepath, u8 *filearray, u32 max_size, u32 *file_size) {
 	s32 ret, fd;
 	static fstats filestats ATTRIBUTE_ALIGN(32);
@@ -84,12 +85,14 @@ s32 ISFS_ReadFileToArray (char *filepath, u8 *filearray, u32 max_size, u32 *file
 	}
 	return 0;
 }
-
+*/
 s32 Identify(const u8 *certs, u32 certs_size, const u8 *idtmd, u32 idtmd_size, const u8 *idticket, u32 idticket_size) {
 	s32 ret;
 	u32 keyid = 0;
 	ret = ES_Identify((signed_blob*)certs, certs_size, (signed_blob*)idtmd, idtmd_size, (signed_blob*)idticket, idticket_size, &keyid);
-	if (ret < 0){
+	if (ret < 0)
+	{
+		printf("\n");
 		switch(ret){
 			case ES_EINVAL:
 				printf("Error! ES_Identify (ret = %d;) Data invalid!\n", ret);
@@ -107,30 +110,23 @@ s32 Identify(const u8 *certs, u32 certs_size, const u8 *idtmd, u32 idtmd_size, c
 				printf("Error! ES_Identify (ret = %d)\n", ret);
 				break;
 		}
-#ifdef DEBUG_IDENT
-		printf("\tTicket: %u Std: %u Max: %u\n", idticket_size, STD_SIGNED_TIK_SIZE, MAX_SIGNED_TMD_SIZE);
-		printf("\tTMD: signed? %d\n", IS_VALID_SIGNATURE(idtmd));
-		printf("\tCerts: Sane? %d\n", __sanity_check_certlist(certs, certs_size));
 		if (!ISALIGNED(certs)) printf("\tCertificate data is not aligned!\n");
 		if (!ISALIGNED(idtmd)) printf("\tTMD data is not aligned!\n");
 		if (!ISALIGNED(idticket)) printf("\tTicket data is not aligned!\n");
-#endif
 	}
-	else
-		printf("OK!\n");
 	return ret;
 }
 
 
 
-s32 Identify_SU(void) {
-	printf("\n\tInforming Wii that I am God...");
-	fflush(stdout);
+s32 Identify_SU(void)
+{
 	return Identify(certs_dat, certs_dat_size, fake_su_tmd_dat, fake_su_tmd_dat_size, fake_su_ticket_dat, fake_su_ticket_dat_size);
 }
-
-s32 Identify_SysMenu(void) {
-	/*s32 ret;
+/*
+s32 Identify_SysMenu(void)
+{
+	s32 ret;
 	u32 sysmenu_tmd_size, sysmenu_ticket_size;
 	static u8 sysmenu_tmd[MAX_SIGNED_TMD_SIZE] ATTRIBUTE_ALIGN(32);
 	static u8 sysmenu_ticket[STD_SIGNED_TIK_SIZE] ATTRIBUTE_ALIGN(32);
@@ -147,9 +143,10 @@ s32 Identify_SysMenu(void) {
 	if (ret < 0) {
 		printf("\tReading TMD failed!\n");
 		return -1;
-	}*/
+	}
 	
 	printf("\n\tInforming the Wii that I am its daddy...");
 	fflush(stdout);
-	return Identify(certs_dat, certs_dat_size, fake_su_tmd_dat, fake_su_tmd_dat_size, fake_su_ticket_dat, fake_su_ticket_dat_size);
+	return Identify(certs_dat, certs_dat_size, sysmenu_tmd, sysmenu_tmd_size, sysmenu_ticket, sysmenu_ticket_size);
 }
+*/
