@@ -196,16 +196,36 @@ void resetscreen()
 void flash(char* source, char* destination)
 {
 	u8 *buffer3 = (u8 *)memalign(32, BLOCKSIZE);
+	if (buffer3 == NULL)
+	{
+		printf("Out of memory\n");
+		printf("Press any button");
+		waitforbuttonpress(NULL, NULL);
+		return;
+	}
+
 	s32 ret;
 	fstats *stats = memalign(32, sizeof(fstats));
-	s32 a;
+	if (stats == NULL)
+	{
+		printf("Out of memory\n");
+		printf("Press any button");
+		waitforbuttonpress(NULL, NULL);
+		free(buffer3);
+		return;
+	}
+
+	s32 nandfile;
 	FILE *file;
 	file = fopen(source, "rb");
 	if(!file) 
 	{
 		printf("fopen error\n");
-		sleep(20);
-		Reboot();
+		printf("Press any button");
+		waitforbuttonpress(NULL, NULL);
+		free(stats);
+		free(buffer3);
+		return;
 	}
 	fseek(file, 0, SEEK_END);
 	u32 filesize = ftell(file);
@@ -215,10 +235,16 @@ void flash(char* source, char* destination)
 
 	ISFS_Delete(destination);
 	ISFS_CreateFile(destination, 0, 3, 3, 3);
-	a = ISFS_Open(destination, ISFS_OPEN_RW);
-	if(!a)
+	nandfile = ISFS_Open(destination, ISFS_OPEN_RW);
+	if(nandfile < 0)
 	{
-		printf("isfs_open_write error %d\n", a);
+		printf("isfs_open_write error %d\n", nandfile);
+		printf("Press any button");
+		waitforbuttonpress(NULL, NULL);
+		fclose(file);
+		free(stats);
+		free(buffer3);
+		return;
 	}
 	printf("Writing file to nand...\n\n");
 		
@@ -238,7 +264,7 @@ void flash(char* source, char* destination)
 		{
 			printf(" fread error %d\n", ret);
 		}
-		ret = ISFS_Write(a, buffer3, size);
+		ret = ISFS_Write(nandfile, buffer3, size);
 		if(!ret) 
 		{
 			printf("isfs_write error %d\n", ret);
@@ -246,12 +272,23 @@ void flash(char* source, char* destination)
 		restsize -= size;
 	}
 	
-	ISFS_Close(a);
-	s32 b = ISFS_Open(destination, ISFS_OPEN_RW);
-	ret = ISFS_GetFileStats(b, stats);
+	ISFS_Close(nandfile);
+	nandfile = ISFS_Open(destination, ISFS_OPEN_RW);
+	if(nandfile < 0)
+	{
+		printf("isfs_open_write error %d\n", nandfile);
+		printf("Press any button");
+		waitforbuttonpress(NULL, NULL);
+		fclose(file);
+		free(stats);
+		free(buffer3);
+		return;
+	}	
+	
+	ret = ISFS_GetFileStats(nandfile, stats);
 	printf("Flashing file to nand successful!\n");
 	printf("New file is %u bytes\n", stats->file_length);
-	ISFS_Close(b);
+	ISFS_Close(nandfile);
 	fclose(file);
 	free(stats);
 	free(buffer3);
@@ -1001,23 +1038,77 @@ int main(int argc, char **argv)
 
 	sprintf(cpath, "/");
 
-	if (Identify_SU() != 0)
+	ret = __io_wiisd.startup();
+	if (!ret)
 	{
-		printf("Identify as SU failed, press any button to continue\n");
+		printf("SD Error\n");
+		printf("Press any button to exit\n");
 		waitforbuttonpress(NULL, NULL);
+		Reboot();
 	}
 	
+	ret = fatMount("sd",&__io_wiisd,0,4,512);
+	if (!ret)
+	{
+		printf("FAT Error\n");
+		printf("Press any button to exit\n");
+		waitforbuttonpress(NULL, NULL);
+		Reboot();
+	}
+
 	ret = ISFS_Initialize();
 	if (ret < 0) 
 	{
 		printf("Error: ISFS_Initialize returned %d\n", ret);
-		sleep(5);
+		printf("Press any button to exit\n");
+		waitforbuttonpress(NULL, NULL);
 		Reboot();
 	}
 
-	__io_wiisd.startup();
-	fatMount("sd",&__io_wiisd,0,4,512);
-	//fatInitDefault();
+	bool accessrights;
+
+	printf("Testing access rights...");
+	ret = ISFS_Open("/title/00000001/00000002/content/title.tmd", ISFS_OPEN_RW);
+	if (ret >= 0)
+	{
+		printf("ok.\n");
+		accessrights = true;
+		ISFS_Close(ret);
+	} else
+	{
+		printf("done.\nEither no system menu installed or access rights are restricted\n");
+		accessrights = false;
+	}
+	
+	bool identifyworked;
+	printf("Identifying as 'SU'...\n");
+	if (Identify_SU() >= 0)
+	{
+		printf("ok.\n");
+		identifyworked = true;
+	} else
+	{
+		identifyworked = false;
+	}
+	
+	if (!accessrights && !identifyworked)
+	{
+		printf("\n\nThe used IOS has neither patched nand access nor allows to use\n");
+		printf("ES_Identify. Nand access will be limited.\n");
+		printf("Press any button\n");
+		waitforbuttonpress(NULL, NULL);
+	} else
+	if (!accessrights)
+	{
+		printf("\n\nThe used IOS does not have patched nand access, but allowed to use\n");
+		printf("ES_Identify. Nand access will be limited.\n");
+		printf("Press any button\n");
+		waitforbuttonpress(NULL, NULL);
+	} else
+	{
+		sleep(3);
+	}
+	
 	resetscreen();
 
 	printf("FS Toolbox 0.3 by Nicksasa & WiiPower\n\n"); 
