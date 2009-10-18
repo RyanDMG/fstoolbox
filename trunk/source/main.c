@@ -1111,7 +1111,7 @@ int main(int argc, char **argv)
 	
 	resetscreen();
 
-	printf("FS Toolbox 0.3 by Nicksasa & WiiPower\n\n"); 
+	printf("FS Toolbox 0.4 by Nicksasa & WiiPower\n\n"); 
 
 	printf("ALL files will be stored in sd:/FSTOOLBOX !\n\n");
 	printf("Press -/L to dump file to SD\n");
