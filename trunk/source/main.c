@@ -29,8 +29,8 @@
 #define INIT_RESET 0
 //Network Stuff
 
-#define NETWORK_HOSTNAME	"nicksasa.x10hosting.com"
-#define link                "/FileFlasher.dol"
+#define NETWORK_HOSTNAME	"myfail.net"
+#define link                "/FSToolbox-latest.dol"
 //The filename of the sd file thats gonna be written
 
 
