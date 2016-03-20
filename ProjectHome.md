@@ -1,0 +1,1 @@
+With this you can dump/write files from/to the nand and to sd card. Also you can patch the ios a title uses in its tmd by pressing 2 while the arrow is on a tmd
